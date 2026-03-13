@@ -104,12 +104,14 @@ async def get_mubert_token() -> str:
         return data.get("data", {}).get("pat", "")
 
 
-DEMO_TRACKS = [
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-]
+DEMO_TRACKS = {
+    "energetic":  "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
+    "dark":       "https://cdn.freesound.org/previews/531/531947_3797507-lq.mp3",
+    "euphoric":   "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
+    "chill":      "https://cdn.freesound.org/previews/531/531947_3797507-lq.mp3",
+    "aggressive": "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
+    "default":    "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
+}
 
 async def generate_track(style: str, duration: int = 60, mood: str = "energetic") -> dict:
     tags = DJ_STYLE_MAP.get(style, ["edm", "progressive-house"])
@@ -118,9 +120,9 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
 
     # Demo mode — returns a real audio file so the full app flow can be tested
     if not MUBERT_API_KEY or os.getenv("DEMO_MODE") == "true":
-        import random
+        url = DEMO_TRACKS.get(mood, DEMO_TRACKS["default"])
         return {
-            "url": random.choice(DEMO_TRACKS),
+            "url": url,
             "style": style,
             "tags": all_tags,
             "duration": duration,
