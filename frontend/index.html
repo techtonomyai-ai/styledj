@@ -49,6 +49,7 @@
     .loading { display:none; text-align:center; padding:20px; color:var(--cyan); }
     .spinner { display:inline-block; width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--cyan); border-radius:50%; animation:spin 0.8s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
+    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(1.3); } }
     .player { display:none; margin-top:20px; padding:20px; background:#0D0D15; border-radius:10px; border:1px solid var(--border); }
     .player audio { width:100%; margin-bottom:12px; }
     .download-btn { width:100%; padding:12px; background:transparent; border:1px solid var(--cyan); border-radius:8px; color:var(--cyan); font-weight:600; cursor:pointer; transition:all 0.2s; }
@@ -117,14 +118,43 @@
     <h2>🎵 Sound Match</h2>
     <p style="text-align:center;color:var(--muted);margin-bottom:20px;font-size:0.95rem;">Upload any track — AI detects the style and generates a copyright-free match</p>
 
+    <!-- RECORD BUTTON -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
+      <button id="recordBtn" onclick="toggleRecord()"
+        style="flex:1;padding:18px;border-radius:12px;border:2px solid #FF4444;background:rgba(255,68,68,0.1);color:#FF4444;font-weight:800;font-size:1.05rem;cursor:pointer;transition:all 0.3s;">
+        🎙️ Hold to Record (30s)
+      </button>
+      <button onclick="document.getElementById('matchFileInput').click()"
+        style="padding:18px 20px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;font-size:0.9rem;font-weight:600;">
+        📁 Upload
+      </button>
+    </div>
+
+    <!-- RECORDING INDICATOR -->
+    <div id="recordingIndicator" style="display:none;text-align:center;padding:20px;background:rgba(255,68,68,0.1);border:1px solid #FF4444;border-radius:12px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+        <div id="recordDot" style="width:14px;height:14px;background:#FF4444;border-radius:50%;animation:pulse 1s infinite;"></div>
+        <span style="color:#FF4444;font-weight:700;font-size:1.1rem;">Recording...</span>
+        <span id="recordCountdown" style="color:#FF4444;font-weight:900;font-size:1.3rem;">30</span>
+      </div>
+      <div style="margin-top:10px;color:var(--muted);font-size:0.85rem;">Play music near your microphone</div>
+      <div style="margin-top:12px;background:rgba(255,68,68,0.2);border-radius:8px;height:6px;overflow:hidden;">
+        <div id="recordProgress" style="height:100%;background:#FF4444;width:0%;transition:width 1s linear;"></div>
+      </div>
+      <button onclick="stopRecord()" style="margin-top:12px;padding:8px 20px;border-radius:8px;border:1px solid #FF4444;background:transparent;color:#FF4444;cursor:pointer;font-weight:600;">
+        ⏹ Stop Early
+      </button>
+    </div>
+
+    <!-- UPLOAD DROPZONE -->
     <div id="dropzone" onclick="document.getElementById('matchFileInput').click()"
-      style="border:2px dashed var(--border);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:20px;"
+      style="border:2px dashed var(--border);border-radius:12px;padding:24px 20px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:16px;"
       ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
       ondragleave="this.style.borderColor='var(--border)'"
       ondrop="handleDrop(event)">
-      <div style="font-size:2.5rem;margin-bottom:12px;">🎵</div>
-      <div style="font-weight:700;margin-bottom:6px;">Drop your track here</div>
-      <div style="color:var(--muted);font-size:0.85rem;">or click to browse — MP3, WAV, OGG, FLAC (max 20MB)</div>
+      <div style="font-size:2rem;margin-bottom:8px;">🎵</div>
+      <div style="font-weight:700;margin-bottom:4px;">Drop a file here</div>
+      <div style="color:var(--muted);font-size:0.82rem;">MP3, WAV, OGG, FLAC (max 20MB)</div>
       <input type="file" id="matchFileInput" accept=".mp3,.wav,.ogg,.flac,audio/*" style="display:none" onchange="handleFileSelect(this.files[0])"/>
     </div>
 
@@ -510,6 +540,96 @@
     const inactiveStyle = 'background:var(--card);color:var(--muted);border:2px solid var(--border);';
     document.getElementById('tab-style').style.cssText += tab === 'style' ? activeStyle : inactiveStyle;
     document.getElementById('tab-match').style.cssText += tab === 'match' ? activeStyle : inactiveStyle;
+  }
+
+  // --- RECORDING ---
+  let mediaRecorder = null;
+  let recordChunks = [];
+  let recordTimer = null;
+  let recordSeconds = 0;
+
+  async function toggleRecord() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecord();
+    } else {
+      startRecord();
+    }
+  }
+
+  async function startRecord() {
+    if (!token) { alert('Please create a free account first!'); startTrial(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordChunks.push(e.data); };
+      mediaRecorder.onstop = processRecording;
+      mediaRecorder.start();
+
+      // UI
+      document.getElementById('recordBtn').style.cssText += 'background:rgba(255,68,68,0.3);border-color:#FF4444;';
+      document.getElementById('recordBtn').textContent = '🔴 Recording...';
+      document.getElementById('recordingIndicator').style.display = 'block';
+      document.getElementById('matchAnalysis').style.display = 'none';
+      document.getElementById('matchBtn').style.display = 'none';
+
+      // Countdown 30 seconds
+      recordSeconds = 30;
+      document.getElementById('recordCountdown').textContent = recordSeconds;
+      document.getElementById('recordProgress').style.width = '0%';
+
+      recordTimer = setInterval(() => {
+        recordSeconds--;
+        document.getElementById('recordCountdown').textContent = recordSeconds;
+        document.getElementById('recordProgress').style.width = `${((30 - recordSeconds) / 30) * 100}%`;
+        if (recordSeconds <= 0) stopRecord();
+      }, 1000);
+
+    } catch(e) {
+      alert('Microphone access denied. Please allow microphone access and try again.');
+    }
+  }
+
+  function stopRecord() {
+    if (recordTimer) { clearInterval(recordTimer); recordTimer = null; }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
+    document.getElementById('recordBtn').style.cssText = 'flex:1;padding:18px;border-radius:12px;border:2px solid #FF4444;background:rgba(255,68,68,0.1);color:#FF4444;font-weight:800;font-size:1.05rem;cursor:pointer;transition:all 0.3s;';
+    document.getElementById('recordBtn').textContent = '🎙️ Hold to Record (30s)';
+    document.getElementById('recordingIndicator').style.display = 'none';
+  }
+
+  async function processRecording() {
+    const blob = new Blob(recordChunks, { type: 'audio/webm' });
+    document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">⏳</div><div style="margin-top:8px;color:var(--cyan)">Analyzing recorded audio...</div>`;
+
+    const formData = new FormData();
+    formData.append('file', blob, 'recording.webm');
+    try {
+      const res = await fetch(`${API}/analyze`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+
+      document.getElementById('matchBPM').textContent = data.bpm;
+      document.getElementById('matchKey').textContent = data.key;
+      document.getElementById('matchMood').textContent = data.mood;
+      document.getElementById('matchGenre').textContent = '🎵 ' + data.genre_guess;
+      const tagsEl = document.getElementById('matchTags');
+      tagsEl.innerHTML = data.tags.map(t => `<span style="padding:4px 10px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:12px;font-size:0.75rem;color:var(--cyan)">${t}</span>`).join('');
+      matchedTags = data.tags;
+      document.getElementById('matchAnalysis').style.display = 'block';
+      document.getElementById('matchDurationGroup').style.display = 'block';
+      document.getElementById('matchBtn').style.display = 'block';
+      document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">🎙️</div><div style="margin-top:8px;color:var(--cyan);font-weight:700">30s recording analyzed!</div><div style="color:var(--muted);font-size:0.8rem;margin-top:4px">Click to upload a file instead</div>`;
+    } catch(e) {
+      alert('Analysis error: ' + e.message);
+    }
   }
 
   // --- SOUND MATCH ---
