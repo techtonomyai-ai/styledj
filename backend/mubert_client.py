@@ -105,12 +105,12 @@ async def get_mubert_token() -> str:
 
 
 DEMO_TRACKS = {
-    "energetic":  "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
-    "dark":       "https://cdn.freesound.org/previews/531/531947_3797507-lq.mp3",
-    "euphoric":   "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
-    "chill":      "https://cdn.freesound.org/previews/531/531947_3797507-lq.mp3",
-    "aggressive": "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
-    "default":    "https://cdn.freesound.org/previews/612/612094_5674468-lq.mp3",
+    "energetic":  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "dark":       "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "euphoric":   "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    "chill":      "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
+    "aggressive": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+    "default":    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
 }
 
 async def generate_track(style: str, duration: int = 60, mood: str = "energetic") -> dict:

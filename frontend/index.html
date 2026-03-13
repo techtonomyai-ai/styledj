@@ -745,7 +745,10 @@
         throw new Error(data.detail || 'Generation failed');
       }
       currentTrackUrl = data.download_url;
-      document.getElementById('audioPlayer').src = data.download_url;
+      const ap = document.getElementById('audioPlayer');
+      ap.src = data.download_url;
+      ap.crossOrigin = 'anonymous';
+      ap.onerror = () => { ap.removeAttribute('crossorigin'); ap.src = data.download_url; };
       document.getElementById('trackInfo').textContent = `🎵 ${style} style • ${Math.round(duration/60)} min • ${currentMood}`;
       document.getElementById('player').style.display = 'block';
     } catch(e) {
