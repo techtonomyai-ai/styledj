@@ -104,10 +104,28 @@ async def get_mubert_token() -> str:
         return data.get("data", {}).get("pat", "")
 
 
+DEMO_TRACKS = [
+    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+]
+
 async def generate_track(style: str, duration: int = 60, mood: str = "energetic") -> dict:
     tags = DJ_STYLE_MAP.get(style, ["edm", "progressive-house"])
     mood_tags = MOOD_MAP.get(mood, [])
     all_tags = list(set(tags + mood_tags))[:5]
+
+    # Demo mode — returns a real audio file so the full app flow can be tested
+    if not MUBERT_API_KEY or os.getenv("DEMO_MODE") == "true":
+        import random
+        return {
+            "url": random.choice(DEMO_TRACKS),
+            "style": style,
+            "tags": all_tags,
+            "duration": duration,
+            "demo": True
+        }
 
     pat = await get_mubert_token()
 
