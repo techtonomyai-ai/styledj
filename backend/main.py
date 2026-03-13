@@ -1,9 +1,11 @@
 import os, uuid, hashlib, sqlite3
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import stripe
 import jwt as pyjwt
@@ -123,6 +125,9 @@ async def health():
 
 @app.get("/")
 async def root():
+    index = Path(__file__).parent.parent / "frontend" / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
     return {"message": "StyleDJ API is running", "version": "1.0.0"}
 
 @app.post("/register")
