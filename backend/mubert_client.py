@@ -188,3 +188,64 @@ DJ_STYLE_MAP.update({
     "Fatboy Slim":          ["big-beat", "breakbeat", "funk", "house"],
     "Chemical Brothers":    ["big-beat", "breakbeat", "techno", "rock-edm"],
 })
+
+# Full genre expansion v3 — all EDM genres
+DJ_STYLE_MAP.update({
+    # Minimal Techno
+    "Ricardo Villalobos":   ["minimal-techno", "micro-house", "hypnotic", "underground"],
+    "Richie Hawtin":        ["minimal-techno", "techno", "dark", "industrial"],
+    "Plastikman":           ["minimal-techno", "acid", "hypnotic", "dark"],
+    "Robert Hood":          ["minimal-techno", "detroit-techno", "functional", "dark"],
+    # Psytrance / Goa
+    "Astrix":               ["psytrance", "goa", "psychedelic", "festival"],
+    "Infected Mushroom":    ["psytrance", "progressive-psytrance", "psychedelic"],
+    "Vini Vici":            ["full-on-psytrance", "festival", "uplifting", "psychedelic"],
+    "Ace Ventura":          ["progressive-psytrance", "melodic", "psychedelic"],
+    "Shpongle":             ["psybient", "ambient", "psychedelic", "world"],
+    # Grime
+    "Skepta":               ["grime", "uk-hip-hop", "bass", "urban"],
+    "Wiley":                ["grime", "uk-garage", "urban", "bass"],
+    "Dizzee Rascal":        ["grime", "uk-hip-hop", "energetic", "urban"],
+    "JME":                  ["grime", "uk-hip-hop", "bass", "underground"],
+    # Amapiano
+    "DJ Maphorisa":         ["amapiano", "afro-house", "log-drum", "south-african"],
+    "Kabza De Small":       ["amapiano", "piano", "afro-house", "melodic"],
+    "DBN Gogo":             ["amapiano", "gqom", "afro-house", "energetic"],
+    "Njelic":               ["amapiano", "melodic", "afro-house", "soulful"],
+    # Baile Funk
+    "DJ Marlboro":          ["baile-funk", "funk-carioca", "bass", "brazilian"],
+    "MC Kevinho":           ["baile-funk", "pop-funk", "bass", "energetic"],
+    "Anitta":               ["baile-funk", "pop", "latin", "energetic"],
+    # Balearic Beat
+    "Jose Padilla":         ["balearic", "ambient", "chill", "sunset"],
+    "Ibizan Style":         ["balearic", "house", "chill", "atmospheric"],
+    "Alex Paterson":        ["balearic", "ambient", "psychedelic", "atmospheric"],
+    # Bhangra
+    "Panjabi MC":           ["bhangra", "indian", "folk", "energetic"],
+    "RDB":                  ["bhangra", "desi-pop", "indian", "urban"],
+    "Surjit Bindrakhia":    ["bhangra", "traditional", "folk", "indian"],
+    # IDM / Experimental
+    "Autechre":             ["idm", "experimental", "glitch", "abstract"],
+    "Squarepusher":         ["idm", "drum-and-bass", "jazz", "experimental"],
+    "Arca":                 ["experimental", "avant-garde", "club", "abstract"],
+    "Four Tet":             ["idm", "folktronica", "ambient", "melodic"],
+    # Bass House
+    "Dr. Fresch":           ["bass-house", "tech-house", "driving", "club"],
+    "AC Slater":            ["bass-house", "night-bass", "driving", "club"],
+    "Valentino Khan":       ["bass-house", "trap-house", "festival", "bass"],
+    "Tchami":               ["bass-house", "future-house", "driving", "dark"],
+    # Jazz Fusion / Electronica
+    "GoGo Penguin":         ["jazz", "electronic", "piano", "melodic"],
+    "Alfa Mist":            ["jazz-fusion", "electronic", "soulful", "melodic"],
+    "Hiatus Kaiyote":       ["neo-soul", "electronic", "jazz", "soulful"],
+    # Moombahton / Latin
+    "Dave Nada":            ["moombahton", "reggaeton", "bass", "latin"],
+    "Dillon Francis":       ["moombahton", "trap", "bass", "festival"],
+    "DJ Snake":             ["latin-edm", "trap", "festival", "pop"],
+    "Bad Bunny Style":      ["reggaeton", "latin-trap", "bass", "urban"],
+    # Industrial / EBM
+    "Nine Inch Nails":      ["industrial", "ebm", "dark", "rock"],
+    "HEALTH":               ["industrial", "noise", "dark", "aggressive"],
+    "Skinny Puppy":         ["ebm", "industrial", "dark", "electronic"],
+    "Front Line Assembly":  ["ebm", "industrial", "futuristic", "dark"],
+})
