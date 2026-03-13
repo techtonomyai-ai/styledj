@@ -8,7 +8,10 @@ from pydantic import BaseModel
 import stripe
 import jwt as pyjwt
 from dotenv import load_dotenv
-from mubert_client import generate_track
+try:
+    from backend.mubert_client import generate_track
+except ImportError:
+    from mubert_client import generate_track
 
 load_dotenv()
 
