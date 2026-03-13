@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StyleDJ — AI DJ Mix Generator</title>
+  <style>
+    :root {
+      --purple: #7B2FBE;
+      --cyan: #00D4FF;
+      --dark: #0A0A0F;
+      --card: #12121A;
+      --border: #1E1E2E;
+      --text: #E0E0FF;
+      --muted: #666688;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:var(--dark); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+
+    /* NAV */
+    nav { display:flex; justify-content:space-between; align-items:center; padding:20px 40px; border-bottom:1px solid var(--border); }
+    .logo { font-size:1.5rem; font-weight:800; background:linear-gradient(135deg,var(--purple),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .nav-btn { background:linear-gradient(135deg,var(--purple),var(--cyan)); border:none; padding:10px 24px; border-radius:8px; color:#fff; font-weight:600; cursor:pointer; font-size:0.9rem; }
+
+    /* HERO */
+    .hero { text-align:center; padding:80px 20px 40px; }
+    .hero h1 { font-size:clamp(2rem,5vw,3.5rem); font-weight:900; line-height:1.1; margin-bottom:20px; }
+    .hero h1 span { background:linear-gradient(135deg,var(--purple),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .hero p { font-size:1.2rem; color:var(--muted); margin-bottom:12px; }
+    .badges { display:flex; gap:12px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
+    .badge { padding:6px 16px; border-radius:20px; border:1px solid var(--border); font-size:0.8rem; color:var(--cyan); }
+
+    /* GENERATOR */
+    .generator { max-width:680px; margin:40px auto; padding:0 20px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:32px; }
+    .card h2 { font-size:1.3rem; margin-bottom:24px; text-align:center; }
+    .form-group { margin-bottom:20px; }
+    label { display:block; font-size:0.85rem; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em; }
+    select, input[type=range] { width:100%; background:#0D0D15; border:1px solid var(--border); border-radius:8px; color:var(--text); padding:12px; font-size:1rem; appearance:none; cursor:pointer; }
+    select:focus { outline:none; border-color:var(--purple); }
+    input[type=range] { padding:8px 0; accent-color:var(--purple); }
+    .duration-label { text-align:center; color:var(--cyan); font-weight:600; margin-top:6px; }
+    .mood-btns { display:flex; gap:10px; flex-wrap:wrap; }
+    .mood-btn { flex:1; min-width:80px; padding:10px; background:#0D0D15; border:1px solid var(--border); border-radius:8px; color:var(--muted); cursor:pointer; font-size:0.9rem; transition:all 0.2s; }
+    .mood-btn.active { border-color:var(--purple); color:var(--purple); background:rgba(123,47,190,0.1); }
+    .generate-btn { width:100%; padding:16px; background:linear-gradient(135deg,var(--purple),var(--cyan)); border:none; border-radius:10px; color:#fff; font-size:1.1rem; font-weight:700; cursor:pointer; margin-top:8px; transition:opacity 0.2s; }
+    .generate-btn:hover { opacity:0.9; }
+    .generate-btn:disabled { opacity:0.5; cursor:not-allowed; }
+    .loading { display:none; text-align:center; padding:20px; color:var(--cyan); }
+    .spinner { display:inline-block; width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--cyan); border-radius:50%; animation:spin 0.8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .player { display:none; margin-top:20px; padding:20px; background:#0D0D15; border-radius:10px; border:1px solid var(--border); }
+    .player audio { width:100%; margin-bottom:12px; }
+    .download-btn { width:100%; padding:12px; background:transparent; border:1px solid var(--cyan); border-radius:8px; color:var(--cyan); font-weight:600; cursor:pointer; transition:all 0.2s; }
+    .download-btn:hover { background:rgba(0,212,255,0.1); }
+    .track-info { font-size:0.85rem; color:var(--muted); margin-bottom:12px; text-align:center; }
+
+    /* HOW IT WORKS */
+    .how { max-width:900px; margin:60px auto; padding:0 20px; text-align:center; }
+    .how h2 { font-size:2rem; margin-bottom:40px; }
+    .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:24px; }
+    .step { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:28px 20px; }
+    .step-num { font-size:2rem; font-weight:900; background:linear-gradient(135deg,var(--purple),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:12px; }
+    .step h3 { margin-bottom:8px; }
+    .step p { color:var(--muted); font-size:0.9rem; }
+
+    /* PRICING */
+    .pricing { max-width:700px; margin:60px auto; padding:0 20px; text-align:center; }
+    .pricing h2 { font-size:2rem; margin-bottom:40px; }
+    .plans { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .plan { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:28px; }
+    .plan.featured { border-color:var(--purple); position:relative; }
+    .plan.featured::before { content:"MOST POPULAR"; position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:var(--purple); padding:4px 12px; border-radius:12px; font-size:0.7rem; font-weight:700; white-space:nowrap; }
+    .plan h3 { font-size:1.2rem; margin-bottom:8px; }
+    .plan .price { font-size:2.5rem; font-weight:900; color:var(--cyan); }
+    .plan .price span { font-size:1rem; color:var(--muted); }
+    .plan ul { list-style:none; margin:16px 0 24px; text-align:left; }
+    .plan ul li { padding:6px 0; color:var(--muted); font-size:0.9rem; }
+    .plan ul li::before { content:"✓ "; color:var(--cyan); font-weight:700; }
+    .plan-btn { width:100%; padding:12px; border-radius:8px; font-weight:600; cursor:pointer; font-size:1rem; border:none; }
+    .plan-btn.primary { background:linear-gradient(135deg,var(--purple),var(--cyan)); color:#fff; }
+    .plan-btn.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+
+    /* FOOTER */
+    footer { text-align:center; padding:40px 20px; color:var(--muted); border-top:1px solid var(--border); margin-top:60px; font-size:0.85rem; }
+
+    @media(max-width:600px) { .plans { grid-template-columns:1fr; } nav { padding:16px 20px; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">⚡ StyleDJ</div>
+  <button class="nav-btn" onclick="scrollToPricing()">Start Free Trial</button>
+</nav>
+
+<section class="hero">
+  <h1>Generate DJ Mixes Like<br/><span>Your Favorite Artists</span></h1>
+  <p>AI-powered • 100% Copyright Free • Instant Download</p>
+  <div class="badges">
+    <span class="badge">✓ No Copyright Strikes</span>
+    <span class="badge">✓ 20+ DJ Styles</span>
+    <span class="badge">✓ 7-Day Free Trial</span>
+    <span class="badge">✓ Commercial Use</span>
+  </div>
+</section>
+
+<div class="generator">
+  <div class="card">
+    <h2>🎵 Generate Your Track</h2>
+
+    <div class="form-group">
+      <label>DJ Style</label>
+      <select id="styleSelect">
+        <option>Martin Garrix</option>
+        <option>Tiësto</option>
+        <option>Deadmau5</option>
+        <option>Daft Punk</option>
+        <option>Calvin Harris</option>
+        <option>Avicii</option>
+        <option>David Guetta</option>
+        <option>Skrillex</option>
+        <option>Marshmello</option>
+        <option>The Chainsmokers</option>
+        <option>Hardwell</option>
+        <option>Armin van Buuren</option>
+        <option>Eric Prydz</option>
+        <option>Swedish House Mafia</option>
+        <option>Kygo</option>
+        <option>Illenium</option>
+        <option>Zedd</option>
+        <option>Porter Robinson</option>
+        <option>Disclosure</option>
+        <option>Flume</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Duration</label>
+      <input type="range" id="durationSlider" min="30" max="3600" value="60" step="30" oninput="updateDuration()"/>
+      <div class="duration-label" id="durationLabel">1 minute</div>
+    </div>
+
+    <div class="form-group">
+      <label>Mood</label>
+      <div class="mood-btns">
+        <button class="mood-btn active" onclick="setMood(this,'energetic')">⚡ Energetic</button>
+        <button class="mood-btn" onclick="setMood(this,'dark')">🌑 Dark</button>
+        <button class="mood-btn" onclick="setMood(this,'euphoric')">✨ Euphoric</button>
+        <button class="mood-btn" onclick="setMood(this,'chill')">🌊 Chill</button>
+      </div>
+    </div>
+
+    <button class="generate-btn" id="generateBtn" onclick="generateTrack()">🎧 Generate Track</button>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p style="margin-top:12px;color:var(--muted)">AI is composing your track...</p>
+    </div>
+
+    <div class="player" id="player">
+      <div class="track-info" id="trackInfo"></div>
+      <audio id="audioPlayer" controls></audio>
+      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()">⬇ Download Track</button>
+    </div>
+  </div>
+</div>
+
+<section class="how">
+  <h2>How It Works</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h3>Pick a Style</h3>
+      <p>Choose from 20 world-famous DJ styles. AI learns their signature sound.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h3>AI Generates</h3>
+      <p>Our AI composes an original track in seconds. No samples. No copyright risk.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h3>Download & Post</h3>
+      <p>Download your track and use it on TikTok, YouTube, Twitch — no strikes ever.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pricing" id="pricing">
+  <h2>Simple Pricing</h2>
+  <div class="plans">
+    <div class="plan">
+      <h3>Free Trial</h3>
+      <div class="price">$0<span>/7 days</span></div>
+      <ul>
+        <li>3 tracks per day</li>
+        <li>All DJ styles</li>
+        <li>Up to 3 min tracks</li>
+        <li>MP3 download</li>
+      </ul>
+      <button class="plan-btn secondary" onclick="startTrial()">Start Free Trial</button>
+    </div>
+    <div class="plan featured">
+      <h3>Pro</h3>
+      <div class="price">$19<span>.99/mo</span></div>
+      <ul>
+        <li>Unlimited tracks</li>
+        <li>All 20 DJ styles</li>
+        <li>Up to 60 min tracks</li>
+        <li>Commercial license</li>
+        <li>Priority generation</li>
+        <li>Cancel anytime</li>
+      </ul>
+      <button class="plan-btn primary" onclick="subscribe()">Get Pro Access</button>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 StyleDJ — Powered by Techtonomy LLC | All generated tracks are original and copyright-free.</p>
+</footer>
+
+<script>
+  const API = 'http://localhost:8000';
+  let token = localStorage.getItem('styledj_token');
+  let currentMood = 'energetic';
+  let currentTrackUrl = '';
+
+  function updateDuration() {
+    const val = parseInt(document.getElementById('durationSlider').value);
+    const label = val < 60 ? `${val} seconds` : val === 60 ? '1 minute' : `${Math.round(val/60)} minutes`;
+    document.getElementById('durationLabel').textContent = label;
+  }
+
+  function setMood(btn, mood) {
+    document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMood = mood;
+  }
+
+  function scrollToPricing() { document.getElementById('pricing').scrollIntoView({behavior:'smooth'}); }
+
+  async function generateTrack() {
+    if (!token) { alert('Please create a free account to generate tracks!'); startTrial(); return; }
+    const style = document.getElementById('styleSelect').value;
+    const duration = parseInt(document.getElementById('durationSlider').value);
+    document.getElementById('generateBtn').disabled = true;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('player').style.display = 'none';
+    try {
+      const res = await fetch(`${API}/generate`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body: JSON.stringify({style, duration, mood: currentMood})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 402) { alert('Subscribe to generate tracks!'); subscribe(); return; }
+        throw new Error(data.detail || 'Generation failed');
+      }
+      currentTrackUrl = data.download_url;
+      document.getElementById('audioPlayer').src = data.download_url;
+      document.getElementById('trackInfo').textContent = `🎵 ${style} style • ${Math.round(duration/60)} min • ${currentMood}`;
+      document.getElementById('player').style.display = 'block';
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('loading').style.display = 'none';
+    }
+  }
+
+  function downloadTrack() {
+    if (!currentTrackUrl) return;
+    const a = document.createElement('a');
+    a.href = currentTrackUrl;
+    a.download = `styledj_${document.getElementById('styleSelect').value.replace(/ /g,'_')}.mp3`;
+    a.click();
+  }
+
+  async function startTrial() {
+    const email = prompt('Enter your email to start your free trial:');
+    if (!email) return;
+    const password = prompt('Create a password:');
+    if (!password) return;
+    try {
+      const res = await fetch(`${API}/register`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({email, password})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      token = data.token;
+      localStorage.setItem('styledj_token', token);
+      alert('🎉 Free trial started! Generate your first track.');
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  async function subscribe() {
+    if (!token) { await startTrial(); if (!token) return; }
+    try {
+      const res = await fetch(`${API}/checkout`, {
+        method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      window.location.href = data.checkout_url;
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+</script>
+</body>
+</html>
