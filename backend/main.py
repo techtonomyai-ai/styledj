@@ -91,7 +91,7 @@ def is_subscribed(user_id: str) -> bool:
     # 7-day free trial
     if user["trial_start"]:
         trial_start = datetime.fromisoformat(user["trial_start"])
-        if datetime.utcnow() - trial_start < timedelta(days=7):
+        if datetime.utcnow() - trial_start < timedelta(days=3):
             return True
     return False
 
@@ -114,6 +114,14 @@ class CheckoutRequest(BaseModel):
     cancel_url: Optional[str] = None
 
 # --- Routes ---
+@app.get("/health")
+async def health():
+    return {"status": "ok", "app": "StyleDJ"}
+
+@app.get("/")
+async def root():
+    return {"message": "StyleDJ API is running", "version": "1.0.0"}
+
 @app.post("/register")
 async def register(req: RegisterRequest):
     conn = get_db()
