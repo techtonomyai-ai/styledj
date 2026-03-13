@@ -106,7 +106,73 @@
 </section>
 
 <div class="generator">
-  <div class="card">
+  <!-- TABS -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;">
+    <button id="tab-style" onclick="switchTab('style')" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff;font-weight:700;cursor:pointer;font-size:0.95rem;">🎧 DJ Style</button>
+    <button id="tab-match" onclick="switchTab('match')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">🎵 Sound Match</button>
+  </div>
+
+  <!-- SOUND MATCH TAB -->
+  <div id="panel-match" class="card" style="display:none;">
+    <h2>🎵 Sound Match</h2>
+    <p style="text-align:center;color:var(--muted);margin-bottom:20px;font-size:0.95rem;">Upload any track — AI detects the style and generates a copyright-free match</p>
+
+    <div id="dropzone" onclick="document.getElementById('matchFileInput').click()"
+      style="border:2px dashed var(--border);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:20px;"
+      ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+      ondragleave="this.style.borderColor='var(--border)'"
+      ondrop="handleDrop(event)">
+      <div style="font-size:2.5rem;margin-bottom:12px;">🎵</div>
+      <div style="font-weight:700;margin-bottom:6px;">Drop your track here</div>
+      <div style="color:var(--muted);font-size:0.85rem;">or click to browse — MP3, WAV, OGG, FLAC (max 20MB)</div>
+      <input type="file" id="matchFileInput" accept=".mp3,.wav,.ogg,.flac,audio/*" style="display:none" onchange="handleFileSelect(this.files[0])"/>
+    </div>
+
+    <div id="matchAnalysis" style="display:none;background:#0D0D15;border-radius:10px;padding:20px;margin-bottom:16px;">
+      <div style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Detected Style</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+        <div style="text-align:center;">
+          <div id="matchBPM" style="font-size:1.8rem;font-weight:900;color:var(--cyan);">—</div>
+          <div style="font-size:0.8rem;color:var(--muted);">BPM</div>
+        </div>
+        <div style="text-align:center;">
+          <div id="matchKey" style="font-size:1.8rem;font-weight:900;color:var(--purple);">—</div>
+          <div style="font-size:0.8rem;color:var(--muted);">Key</div>
+        </div>
+        <div style="text-align:center;">
+          <div id="matchMood" style="font-size:1.8rem;font-weight:900;color:#00FF88;">—</div>
+          <div style="font-size:0.8rem;color:var(--muted);">Mood</div>
+        </div>
+      </div>
+      <div style="text-align:center;padding:10px;background:rgba(123,47,190,0.15);border-radius:8px;margin-bottom:12px;">
+        <span style="color:var(--purple);font-weight:700;font-size:1rem;" id="matchGenre">—</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">Matched Tags:</div>
+      <div id="matchTags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+
+    <div class="form-group" id="matchDurationGroup" style="display:none;">
+      <label>Output Duration</label>
+      <input type="range" id="matchDurationSlider" min="30" max="3600" value="60" step="30" oninput="updateMatchDuration()"/>
+      <div class="duration-label" id="matchDurationLabel">1 minute</div>
+    </div>
+
+    <button class="generate-btn" id="matchBtn" onclick="matchTrack()" style="display:none;">⚡ Generate Sound Match</button>
+
+    <div class="loading" id="matchLoading" style="display:none;">
+      <div class="spinner"></div>
+      <p style="margin-top:12px;color:var(--muted)">Analyzing audio and generating match...</p>
+    </div>
+
+    <div class="player" id="matchPlayer" style="display:none;">
+      <div class="track-info" id="matchTrackInfo"></div>
+      <audio id="matchAudioPlayer" controls style="width:100%;margin-bottom:12px;"></audio>
+      <button class="download-btn" onclick="downloadMatchTrack()">⬇ Download Copyright-Free Match</button>
+    </div>
+  </div>
+
+  <!-- STYLE TAB -->
+  <div id="panel-style" class="card">
     <h2>🎵 Generate Your Track</h2>
 
     <div class="form-group">
@@ -285,6 +351,51 @@
       <button class="download-btn" id="downloadBtn" onclick="downloadTrack()">⬇ Download Track</button>
     </div>
   </div>
+
+  <!-- SOUND MATCH TAB -->
+  <div id="panel-match" class="card" style="display:none;">
+    <h2>🎵 Sound Match</h2>
+    <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;text-align:center;">Upload a track or audio clip — AI analyzes the vibe and generates a copyright-free version</p>
+
+    <div class="form-group">
+      <label>Upload Audio Clip (MP3, WAV, M4A)</label>
+      <div id="dropzone" onclick="document.getElementById('audioUpload').click()" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--purple)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-size:2rem;margin-bottom:8px;">🎵</div>
+        <div style="color:var(--muted);font-size:0.9rem;">Click to upload or drag & drop</div>
+        <div style="color:var(--muted);font-size:0.8rem;margin-top:4px;">Supports MP3, WAV, M4A — max 10MB</div>
+      </div>
+      <input type="file" id="audioUpload" accept=".mp3,.wav,.m4a,audio/*" style="display:none" onchange="handleAudioUpload(event)"/>
+    </div>
+
+    <div id="matchFileInfo" style="display:none;background:#0D0D15;border-radius:8px;padding:12px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:1.5rem;">🎶</span>
+        <div>
+          <div id="matchFileName" style="font-weight:600;font-size:0.9rem;"></div>
+          <div id="matchFileSize" style="color:var(--muted);font-size:0.8rem;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Duration of Generated Track</label>
+      <input type="range" id="matchDurationSlider" min="30" max="3600" value="60" step="30" oninput="updateMatchDuration()"/>
+      <div class="duration-label" id="matchDurationLabel">1 minute</div>
+    </div>
+
+    <button class="generate-btn" id="matchBtn" onclick="matchSound()" disabled>🔍 Analyze & Generate Match</button>
+
+    <div class="loading" id="matchLoading" style="display:none;">
+      <div class="spinner"></div>
+      <p style="margin-top:12px;color:var(--muted)" id="matchStatus">Analyzing audio vibe...</p>
+    </div>
+
+    <div id="matchResult" style="display:none;" class="player">
+      <div id="matchInfo" class="track-info"></div>
+      <audio id="matchAudioPlayer" controls style="width:100%;margin-bottom:12px;"></audio>
+      <button class="download-btn" onclick="downloadMatch()">⬇ Download Copyright-Free Match</button>
+    </div>
+  </div>
 </div>
 
 <section class="how">
@@ -362,6 +473,110 @@
 
   function scrollToPricing() { document.getElementById('pricing').scrollIntoView({behavior:'smooth'}); }
 
+  // --- TABS ---
+  function switchTab(tab) {
+    document.getElementById('panel-style').style.display = tab === 'style' ? 'block' : 'none';
+    document.getElementById('panel-match').style.display = tab === 'match' ? 'block' : 'none';
+    const activeStyle = 'background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff;border:none;';
+    const inactiveStyle = 'background:var(--card);color:var(--muted);border:2px solid var(--border);';
+    document.getElementById('tab-style').style.cssText += tab === 'style' ? activeStyle : inactiveStyle;
+    document.getElementById('tab-match').style.cssText += tab === 'match' ? activeStyle : inactiveStyle;
+  }
+
+  // --- SOUND MATCH ---
+  let matchedTags = [];
+  let matchCurrentUrl = '';
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').style.borderColor = 'var(--border)';
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  }
+
+  async function handleFileSelect(file) {
+    if (!file) return;
+    if (!token) { alert('Please create a free account first!'); startTrial(); return; }
+    document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">⏳</div><div style="margin-top:8px;color:var(--cyan)">Analyzing <b>${file.name}</b>...</div>`;
+    document.getElementById('matchAnalysis').style.display = 'none';
+    document.getElementById('matchBtn').style.display = 'none';
+    document.getElementById('matchDurationGroup').style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch(`${API}/analyze`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+
+      // Show results
+      document.getElementById('matchBPM').textContent = data.bpm;
+      document.getElementById('matchKey').textContent = data.key;
+      document.getElementById('matchMood').textContent = data.mood;
+      document.getElementById('matchGenre').textContent = '🎵 ' + data.genre_guess;
+      const tagsEl = document.getElementById('matchTags');
+      tagsEl.innerHTML = data.tags.map(t => `<span style="padding:4px 10px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:12px;font-size:0.75rem;color:var(--cyan)">${t}</span>`).join('');
+      matchedTags = data.tags;
+      document.getElementById('matchAnalysis').style.display = 'block';
+      document.getElementById('matchDurationGroup').style.display = 'block';
+      document.getElementById('matchBtn').style.display = 'block';
+      document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">✅</div><div style="margin-top:8px;color:var(--cyan);font-weight:700">${file.name}</div><div style="color:var(--muted);font-size:0.8rem;margin-top:4px">Click to change file</div>`;
+    } catch(e) {
+      alert('Analysis error: ' + e.message);
+      document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">🎵</div><div style="font-weight:700;margin-top:8px">Drop your track here</div><div style="color:var(--muted);font-size:0.85rem">or click to browse</div>`;
+    }
+  }
+
+  function updateMatchDuration() {
+    const val = parseInt(document.getElementById('matchDurationSlider').value);
+    const label = val < 60 ? `${val} seconds` : val === 60 ? '1 minute' : `${Math.round(val/60)} minutes`;
+    document.getElementById('matchDurationLabel').textContent = label;
+  }
+
+  async function matchTrack() {
+    if (!token) { startTrial(); return; }
+    const fileInput = document.getElementById('matchFileInput');
+    if (!fileInput.files[0]) { alert('Please upload a file first'); return; }
+    const duration = parseInt(document.getElementById('matchDurationSlider').value);
+    document.getElementById('matchBtn').disabled = true;
+    document.getElementById('matchLoading').style.display = 'block';
+    document.getElementById('matchPlayer').style.display = 'none';
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('duration', duration);
+    try {
+      const res = await fetch(`${API}/match`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 402) { subscribe(); return; }
+        throw new Error(data.detail || 'Match failed');
+      }
+      matchCurrentUrl = data.download_url;
+      document.getElementById('matchAudioPlayer').src = data.download_url;
+      document.getElementById('matchTrackInfo').textContent = `⚡ Sound Match — ${data.genre} • ${Math.round(duration/60)} min`;
+      document.getElementById('matchPlayer').style.display = 'block';
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      document.getElementById('matchBtn').disabled = false;
+      document.getElementById('matchLoading').style.display = 'none';
+    }
+  }
+
+  function downloadMatchTrack() {
+    if (!matchCurrentUrl) return;
+    const a = document.createElement('a'); a.href = matchCurrentUrl;
+    a.download = 'styledj_sound_match.mp3'; a.click();
+  }
+
   async function generateTrack() {
     if (!token) { alert('Please create a free account to generate tracks!'); startTrial(); return; }
     const style = document.getElementById('styleSelect').value;
@@ -416,6 +631,84 @@
       localStorage.setItem('styledj_token', token);
       alert('🎉 Free trial started! Generate your first track.');
     } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  // ── TAB SWITCHING ──
+  function switchTab(tab) {
+    const isStyle = tab === 'style';
+    document.getElementById('panel-style').style.display = isStyle ? 'block' : 'none';
+    document.getElementById('panel-match').style.display = isStyle ? 'none' : 'block';
+    document.getElementById('tab-style').style.background = isStyle ? 'linear-gradient(135deg,var(--purple),var(--cyan))' : 'var(--card)';
+    document.getElementById('tab-style').style.color = isStyle ? '#fff' : 'var(--muted)';
+    document.getElementById('tab-style').style.border = isStyle ? 'none' : '2px solid var(--border)';
+    document.getElementById('tab-match').style.background = !isStyle ? 'linear-gradient(135deg,var(--purple),var(--cyan))' : 'var(--card)';
+    document.getElementById('tab-match').style.color = !isStyle ? '#fff' : 'var(--muted)';
+    document.getElementById('tab-match').style.border = !isStyle ? 'none' : '2px solid var(--border)';
+  }
+
+  // ── SOUND MATCH ──
+  let matchFile = null;
+  let matchTrackUrl = '';
+
+  function updateMatchDuration() {
+    const val = parseInt(document.getElementById('matchDurationSlider').value);
+    const label = val < 60 ? `${val} seconds` : val === 60 ? '1 minute' : `${Math.round(val/60)} minutes`;
+    document.getElementById('matchDurationLabel').textContent = label;
+  }
+
+  function handleAudioUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    matchFile = file;
+    document.getElementById('matchFileName').textContent = file.name;
+    document.getElementById('matchFileSize').textContent = (file.size / (1024*1024)).toFixed(2) + ' MB';
+    document.getElementById('matchFileInfo').style.display = 'block';
+    document.getElementById('matchBtn').disabled = false;
+    document.getElementById('dropzone').style.borderColor = 'var(--purple)';
+  }
+
+  async function matchSound() {
+    if (!matchFile) return;
+    if (!token) { alert('Please create a free account first!'); startTrial(); return; }
+    const duration = parseInt(document.getElementById('matchDurationSlider').value);
+    document.getElementById('matchBtn').disabled = true;
+    document.getElementById('matchLoading').style.display = 'block';
+    document.getElementById('matchResult').style.display = 'none';
+    document.getElementById('matchStatus').textContent = 'Analyzing audio vibe...';
+
+    try {
+      const formData = new FormData();
+      formData.append('file', matchFile);
+      formData.append('duration', duration);
+
+      document.getElementById('matchStatus').textContent = 'Detecting genre & energy...';
+      const res = await fetch(`${API}/match`, {
+        method: 'POST',
+        headers: {'Authorization': `Bearer ${token}`},
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Match failed');
+
+      document.getElementById('matchStatus').textContent = 'Generating your copyright-free track...';
+      matchTrackUrl = data.download_url;
+      document.getElementById('matchAudioPlayer').src = data.download_url;
+      document.getElementById('matchInfo').textContent = `🎵 Detected: ${data.detected_style} • ${data.bpm} BPM • ${data.energy} energy`;
+      document.getElementById('matchResult').style.display = 'block';
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      document.getElementById('matchBtn').disabled = false;
+      document.getElementById('matchLoading').style.display = 'none';
+    }
+  }
+
+  function downloadMatch() {
+    if (!matchTrackUrl) return;
+    const a = document.createElement('a');
+    a.href = matchTrackUrl;
+    a.download = `styledj_match_${Date.now()}.mp3`;
+    a.click();
   }
 
   async function subscribe() {

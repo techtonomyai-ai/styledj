@@ -2,7 +2,7 @@ import os, uuid, hashlib, sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -199,6 +199,80 @@ async def get_track(track_id: str, user_id: str = Depends(verify_token)):
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
     return dict(track)
+
+@app.post("/analyze")
+async def analyze_sound(file: UploadFile = File(...), user_id: str = Depends(verify_token)):
+    """Upload an audio file — AI analyzes BPM, key, energy and maps to a genre style."""
+    allowed = ["audio/mpeg", "audio/wav", "audio/mp3", "audio/ogg", "audio/flac", "audio/x-wav"]
+    if file.content_type not in allowed and not file.filename.endswith((".mp3",".wav",".ogg",".flac")):
+        raise HTTPException(status_code=400, detail="Please upload an MP3, WAV, OGG, or FLAC file.")
+    
+    audio_bytes = await file.read()
+    if len(audio_bytes) > 20 * 1024 * 1024:  # 20MB limit
+        raise HTTPException(status_code=400, detail="File too large. Max 20MB.")
+    
+    try:
+        from backend.sound_match import analyze_audio
+    except ImportError:
+        from sound_match import analyze_audio
+
+    analysis = analyze_audio(audio_bytes, file.filename)
+    return {
+        "bpm": analysis["bpm"],
+        "key": analysis["key"],
+        "energy": analysis["energy"],
+        "mood": analysis["mood"],
+        "genre_guess": analysis["genre_guess"],
+        "tags": analysis["tags"],
+        "analysis_success": analysis["analysis_success"]
+    }
+
+
+@app.post("/match")
+async def sound_match_generate(
+    file: UploadFile = File(...),
+    duration: int = 60,
+    user_id: str = Depends(verify_token)
+):
+    """Upload audio → analyze style → generate a matching copyright-free track via Mubert."""
+    if not is_subscribed(user_id):
+        raise HTTPException(status_code=402, detail="Subscribe to use Sound Match.")
+
+    audio_bytes = await file.read()
+
+    try:
+        from backend.sound_match import analyze_audio
+    except ImportError:
+        from sound_match import analyze_audio
+
+    analysis = analyze_audio(audio_bytes, file.filename)
+    
+    # Generate matching track via Mubert
+    track = await generate_track(
+        style=analysis["genre_guess"],
+        duration=duration,
+        mood=analysis["mood"]
+    )
+
+    # Save to DB
+    track_id = str(uuid.uuid4())
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO tracks (id, user_id, style, url, duration, mood) VALUES (?,?,?,?,?,?)",
+            (track_id, user_id, f"Sound Match: {analysis['genre_guess']}", track["url"], duration, analysis["mood"])
+        )
+
+    return {
+        "track_id": track_id,
+        "download_url": track["url"],
+        "analysis": analysis,
+        "matched_style": analysis["genre_guess"],
+        "bpm": analysis["bpm"],
+        "key": analysis["key"],
+        "mood": analysis["mood"],
+        "tags": analysis["tags"]
+    }
+
 
 @app.get("/tracks")
 async def list_tracks(user_id: str = Depends(verify_token)):
