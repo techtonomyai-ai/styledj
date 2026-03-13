@@ -352,49 +352,7 @@
     </div>
   </div>
 
-  <!-- SOUND MATCH TAB -->
-  <div id="panel-match" class="card" style="display:none;">
-    <h2>🎵 Sound Match</h2>
-    <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;text-align:center;">Upload a track or audio clip — AI analyzes the vibe and generates a copyright-free version</p>
-
-    <div class="form-group">
-      <label>Upload Audio Clip (MP3, WAV, M4A)</label>
-      <div id="dropzone" onclick="document.getElementById('audioUpload').click()" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--purple)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:2rem;margin-bottom:8px;">🎵</div>
-        <div style="color:var(--muted);font-size:0.9rem;">Click to upload or drag & drop</div>
-        <div style="color:var(--muted);font-size:0.8rem;margin-top:4px;">Supports MP3, WAV, M4A — max 10MB</div>
-      </div>
-      <input type="file" id="audioUpload" accept=".mp3,.wav,.m4a,audio/*" style="display:none" onchange="handleAudioUpload(event)"/>
-    </div>
-
-    <div id="matchFileInfo" style="display:none;background:#0D0D15;border-radius:8px;padding:12px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:1.5rem;">🎶</span>
-        <div>
-          <div id="matchFileName" style="font-weight:600;font-size:0.9rem;"></div>
-          <div id="matchFileSize" style="color:var(--muted);font-size:0.8rem;"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Duration of Generated Track</label>
-      <input type="range" id="matchDurationSlider" min="30" max="3600" value="60" step="30" oninput="updateMatchDuration()"/>
-      <div class="duration-label" id="matchDurationLabel">1 minute</div>
-    </div>
-
-    <button class="generate-btn" id="matchBtn" onclick="matchSound()" disabled>🔍 Analyze & Generate Match</button>
-
-    <div class="loading" id="matchLoading" style="display:none;">
-      <div class="spinner"></div>
-      <p style="margin-top:12px;color:var(--muted)" id="matchStatus">Analyzing audio vibe...</p>
-    </div>
-
-    <div id="matchResult" style="display:none;" class="player">
-      <div id="matchInfo" class="track-info"></div>
-      <audio id="matchAudioPlayer" controls style="width:100%;margin-bottom:12px;"></audio>
-      <button class="download-btn" onclick="downloadMatch()">⬇ Download Copyright-Free Match</button>
-    </div>
+  <!-- SOUND MATCH TAB (handled above) -->
   </div>
 </div>
 
