@@ -51,6 +51,10 @@ def init_db():
         subscribed INTEGER DEFAULT 0,
         trial_start TEXT,
         stripe_customer_id TEXT,
+        email_verified INTEGER DEFAULT 0,
+        verify_token TEXT,
+        reset_token TEXT,
+        reset_token_expires TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS tracks (
@@ -146,6 +150,50 @@ async def register(req: RegisterRequest):
     finally:
         conn.close()
     return {"token": create_token(user_id), "user_id": user_id}
+
+@app.post("/forgot-password")
+async def forgot_password(req: LoginRequest):
+    try:
+        from backend.email_service import send_password_reset_email
+    except ImportError:
+        from email_service import send_password_reset_email
+    conn = get_db()
+    user = conn.execute("SELECT id FROM users WHERE email=?", (req.email,)).fetchone()
+    if not user:
+        return {"message": "If that email exists, a reset link has been sent."}
+    reset_token = str(uuid.uuid4())
+    expires = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    conn.execute("UPDATE users SET reset_token=?, reset_token_expires=? WHERE email=?",
+                 (reset_token, expires, req.email))
+    conn.commit()
+    send_password_reset_email(req.email, reset_token)
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@app.post("/reset-password")
+async def reset_password(token: str, new_password: str):
+    conn = get_db()
+    user = conn.execute("SELECT id, reset_token_expires FROM users WHERE reset_token=?", (token,)).fetchone()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+    if datetime.fromisoformat(user["reset_token_expires"]) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+    conn.execute("UPDATE users SET password_hash=?, reset_token=NULL, reset_token_expires=NULL WHERE reset_token=?",
+                 (hash_password(new_password), token))
+    conn.commit()
+    return {"message": "Password updated! You can now log in."}
+
+
+@app.get("/verify")
+async def verify_email(token: str):
+    conn = get_db()
+    user = conn.execute("SELECT id FROM users WHERE verify_token=?", (token,)).fetchone()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification link.")
+    conn.execute("UPDATE users SET email_verified=1, verify_token=NULL WHERE verify_token=?", (token,))
+    conn.commit()
+    return FileResponse(str(Path(__file__).parent.parent / "frontend" / "index.html"))
+
 
 @app.post("/login")
 async def login(req: LoginRequest):
