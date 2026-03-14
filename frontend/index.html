@@ -763,6 +763,7 @@
       const tagsEl = document.getElementById('matchTags');
       tagsEl.innerHTML = data.tags.map(t => `<span style="padding:4px 10px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:12px;font-size:0.75rem;color:var(--cyan)">${t}</span>`).join('');
       matchedTags = data.tags;
+      lastAnalysis = { style: data.genre_guess, mood: data.mood, tags: data.tags };
       document.getElementById('matchAnalysis').style.display = 'block';
       document.getElementById('matchDurationGroup').style.display = 'block';
       document.getElementById('matchBtn').style.display = 'block';
@@ -775,7 +776,8 @@
   // --- SOUND MATCH ---
   let matchedTags = [];
   let matchCurrentUrl = '';
-  let recordedBlob = null; // stores mic recording blob
+  let recordedBlob = null;
+  let lastAnalysis = null; // stores analysis results for direct generation
 
   function handleDrop(e) {
     e.preventDefault();
@@ -811,6 +813,7 @@
       const tagsEl = document.getElementById('matchTags');
       tagsEl.innerHTML = data.tags.map(t => `<span style="padding:4px 10px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:12px;font-size:0.75rem;color:var(--cyan)">${t}</span>`).join('');
       matchedTags = data.tags;
+      lastAnalysis = { style: data.genre_guess, mood: data.mood, tags: data.tags };
       document.getElementById('matchAnalysis').style.display = 'block';
       document.getElementById('matchDurationGroup').style.display = 'block';
       document.getElementById('matchBtn').style.display = 'block';
@@ -829,27 +832,25 @@
 
   async function matchTrack() {
     if (!token) { showAuthModal('register'); return; }
-
-    const fileInput = document.getElementById('matchFileInput');
-    const sourceFile = fileInput.files[0] || (recordedBlob ? new File([recordedBlob.blob], `recording.${recordedBlob.ext}`, { type: recordedBlob.blob.type }) : null);
-    if (!sourceFile) { showToast('⚠️ Please record or upload audio first'); return; }
+    if (!lastAnalysis) { showToast('⚠️ Please record or upload audio first'); return; }
 
     const duration = parseInt(document.getElementById('matchDurationSlider').value) || 60;
     const btn = document.getElementById('matchBtn');
     btn.disabled = true;
-    btn.textContent = '⏳ Generating...';
+    btn.textContent = '⏳ Generating... (~15s)';
     document.getElementById('matchLoading').style.display = 'block';
     document.getElementById('matchPlayer').style.display = 'none';
 
-    const formData = new FormData();
-    formData.append('file', sourceFile);
-    formData.append('duration', String(duration));
-
     try {
-      const res = await fetch(`${API}/match`, {
+      // Use /generate directly with detected style — no file re-upload needed
+      const res = await fetch(`${API}/generate`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
+        headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
+        body: JSON.stringify({
+          style: lastAnalysis.style || 'Martin Garrix',
+          duration: duration,
+          mood: lastAnalysis.mood || 'energetic'
+        })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -857,13 +858,13 @@
           token = null; localStorage.removeItem('styledj_token');
           showAuthModal('login'); return;
         }
-        if (res.status === 402) { showToast('⚠️ Please subscribe to use Sound Match'); subscribe(); return; }
-        throw new Error(data.detail || 'Match failed');
+        if (res.status === 402) { showToast('⚠️ Please subscribe to generate tracks'); return; }
+        throw new Error(data.detail || 'Generation failed');
       }
       matchCurrentUrl = data.download_url;
       const ap = document.getElementById('matchAudioPlayer');
       ap.src = data.download_url;
-      document.getElementById('matchTrackInfo').textContent = `⚡ Sound Match — ${data.genre || 'EDM'} • ${duration}s`;
+      document.getElementById('matchTrackInfo').textContent = `⚡ Sound Match — ${lastAnalysis.style} • ${duration}s`;
       document.getElementById('matchPlayer').style.display = 'block';
       document.getElementById('matchPlayer').scrollIntoView({behavior:'smooth', block:'center'});
     } catch(e) {
