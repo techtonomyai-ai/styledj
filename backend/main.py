@@ -429,6 +429,16 @@ async def checkout(req: CheckoutRequest, user_id: str = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/admin/subscribe")
+async def admin_subscribe(email: str, secret: str):
+    if secret != os.getenv("ADMIN_SECRET", ""):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    conn = get_db()
+    conn.execute("UPDATE users SET subscribed=1 WHERE email=?", (email,))
+    conn.commit()
+    conn.close()
+    return {"message": f"✅ {email} set to subscribed"}
+
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
