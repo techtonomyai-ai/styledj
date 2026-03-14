@@ -638,6 +638,7 @@
     const mimeType = mediaRecorder.mimeType || 'audio/mp4';
     const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'mp4';
     const blob = new Blob(recordChunks, { type: mimeType });
+    recordedBlob = { blob, ext }; // save for Generate button
     document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">⏳</div><div style="margin-top:8px;color:var(--cyan)">Analyzing recorded audio...</div>`;
 
     const formData = new FormData();
@@ -670,6 +671,7 @@
   // --- SOUND MATCH ---
   let matchedTags = [];
   let matchCurrentUrl = '';
+  let recordedBlob = null; // stores mic recording blob
 
   function handleDrop(e) {
     e.preventDefault();
@@ -724,13 +726,14 @@
   async function matchTrack() {
     if (!token) { startTrial(); return; }
     const fileInput = document.getElementById('matchFileInput');
-    if (!fileInput.files[0]) { alert('Please upload a file first'); return; }
+    const sourceFile = fileInput.files[0] || (recordedBlob ? new File([recordedBlob.blob], `recording.${recordedBlob.ext}`, { type: recordedBlob.blob.type }) : null);
+    if (!sourceFile) { showToast('⚠️ Please record or upload audio first'); return; }
     const duration = parseInt(document.getElementById('matchDurationSlider').value);
     document.getElementById('matchBtn').disabled = true;
     document.getElementById('matchLoading').style.display = 'block';
     document.getElementById('matchPlayer').style.display = 'none';
     const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
+    formData.append('file', sourceFile);
     formData.append('duration', duration);
     try {
       const res = await fetch(`${API}/match`, {
