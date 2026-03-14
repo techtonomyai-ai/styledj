@@ -1,9 +1,29 @@
-import httpx, os, uuid
+"""Mubert AI Music API v3 integration for StyleDJ."""
+import httpx, os, asyncio
 from typing import Optional
 
-MUBERT_API_KEY = os.getenv("MUBERT_API_KEY", "")
-MUBERT_EMAIL = os.getenv("MUBERT_EMAIL", "")
+MUBERT_COMPANY_ID = os.getenv("MUBERT_COMPANY_ID", "")
+MUBERT_LICENSE_TOKEN = os.getenv("MUBERT_LICENSE_TOKEN", "")
 
+MUBERT_BASE = "https://music-api.mubert.com/api/v3"
+
+def company_headers() -> dict:
+    return {
+        "Content-Type": "application/json",
+        "company-id": MUBERT_COMPANY_ID,
+        "license-token": MUBERT_LICENSE_TOKEN,
+    }
+
+def customer_headers(customer_id: str, access_token: str) -> dict:
+    return {
+        "Content-Type": "application/json",
+        "customer-id": customer_id,
+        "access-token": access_token,
+    }
+
+# ------------------------------------------------------------------ #
+# DJ → Mubert tag mapping
+# ------------------------------------------------------------------ #
 DJ_STYLE_MAP = {
     # --- PROGRESSIVE HOUSE / BIG ROOM ---
     "Martin Garrix":        ["edm", "progressive-house", "uplifting", "festival"],
@@ -14,7 +34,6 @@ DJ_STYLE_MAP = {
     "Eric Prydz":           ["progressive-house", "deep-tech", "minimal", "hypnotic"],
     "deadmau5":             ["progressive-house", "techno", "dark", "minimal"],
     "Avicii":               ["progressive-house", "melodic", "folk-edm", "uplifting"],
-
     # --- TRANCE ---
     "Armin van Buuren":     ["trance", "progressive-trance", "uplifting"],
     "Tiësto":               ["trance", "edm", "club", "big-room"],
@@ -22,7 +41,6 @@ DJ_STYLE_MAP = {
     "Ferry Corsten":        ["trance", "tech-trance", "progressive"],
     "Andrew Rayel":         ["uplifting-trance", "melodic-trance", "emotional"],
     "KSHMR":                ["trance", "festival", "world", "epic"],
-
     # --- TECHNO ---
     "Charlotte de Witte":   ["techno", "dark", "industrial", "raw"],
     "Amelie Lens":          ["techno", "dark", "hypnotic", "driving"],
@@ -30,7 +48,6 @@ DJ_STYLE_MAP = {
     "Reinier Zonneveld":    ["techno", "hard-techno", "industrial", "dark"],
     "Tale Of Us":           ["melodic-techno", "atmospheric", "dark", "emotional"],
     "Anyma":                ["melodic-techno", "afterlife", "dark", "cinematic"],
-
     # --- HOUSE / DEEP HOUSE ---
     "Daft Punk":            ["house", "french-house", "funk", "disco"],
     "Fisher":               ["tech-house", "driving", "club", "peak-time"],
@@ -40,14 +57,12 @@ DJ_STYLE_MAP = {
     "Black Coffee":         ["afro-house", "deep-house", "organic", "minimal"],
     "Solomun":              ["deep-house", "melodic", "atmospheric", "club"],
     "Jamie Jones":          ["tech-house", "deep-house", "underground"],
-
     # --- ELECTRO / FRENCH ---
     "Calvin Harris":        ["edm", "pop", "future-house", "tropical"],
     "David Guetta":         ["edm", "pop", "electro-house", "club"],
     "Zedd":                 ["electro-house", "complextro", "pop", "edm"],
     "Gesaffelstein":        ["dark-electro", "industrial", "techno", "dark"],
     "Justice":              ["electro", "french-house", "rock-edm", "distorted"],
-
     # --- FUTURE BASS / MELODIC ---
     "Marshmello":           ["future-bass", "edm", "happy", "melodic"],
     "Illenium":             ["future-bass", "melodic-dubstep", "emotional"],
@@ -55,26 +70,120 @@ DJ_STYLE_MAP = {
     "Flume":                ["future-bass", "experimental", "electronic"],
     "San Holo":             ["future-bass", "indie-dance", "guitar", "emotional"],
     "Lane 8":               ["melodic-house", "deep-house", "emotional", "journey"],
-
     # --- DUBSTEP / BASS ---
     "Skrillex":             ["dubstep", "bass", "electro", "trap"],
     "Excision":             ["riddim", "heavy-dubstep", "bass", "dark"],
     "Virtual Riot":         ["dubstep", "bass", "experimental", "heavy"],
     "Subtronics":           ["riddim", "bass", "heavy", "dark"],
-
     # --- DRUM & BASS ---
     "Chase & Status":       ["drum-and-bass", "bass", "uk-garage", "grime"],
     "Pendulum":             ["drum-and-bass", "rock-dnb", "festival", "energetic"],
     "Sub Focus":            ["drum-and-bass", "liquid-dnb", "melodic", "uplifting"],
-
     # --- TRAP / FUTURE ---
     "RL Grime":             ["trap", "future-trap", "bass", "dark"],
     "Baauer":               ["trap", "experimental", "bass", "club"],
-
     # --- CHILL / TROPICAL ---
     "Kygo":                 ["tropical-house", "chill", "melodic", "piano"],
     "The Chainsmokers":     ["future-house", "pop", "indie-dance"],
 }
+
+DJ_STYLE_MAP.update({
+    "Above & Beyond":       ["trance", "progressive-trance", "emotional", "uplifting"],
+    "Dash Berlin":          ["trance", "uplifting-trance", "melodic"],
+    "Markus Schulz":        ["trance", "progressive-trance", "dark", "atmospheric"],
+    "Cosmic Gate":          ["trance", "progressive-trance", "melodic"],
+    "Aly & Fila":           ["uplifting-trance", "goa-trance", "emotional"],
+    "Boris Brejcha":        ["minimal-techno", "freak-show", "dark", "hypnotic"],
+    "Maceo Plex":           ["techno", "deep-techno", "dark", "hypnotic"],
+    "Adriatique":           ["melodic-techno", "deep-house", "atmospheric"],
+    "Stephan Bodzin":       ["melodic-techno", "dark", "cinematic", "hypnotic"],
+    "Nina Kraviz":          ["techno", "acid", "dark", "underground"],
+    "Dense & Pika":         ["techno", "industrial", "hard-techno", "dark"],
+    "KiNK":                 ["techno", "acid", "experimental", "live"],
+    "DJ Koze":              ["deep-house", "indie-dance", "eclectic", "melodic"],
+    "Peggy Gou":            ["techno", "disco", "house", "fun"],
+    "Mind Against":         ["melodic-techno", "deep", "atmospheric", "dark"],
+    "Innellea":             ["melodic-techno", "emotional", "cinematic"],
+    "CamelPhat":            ["tech-house", "progressive", "dark", "deep"],
+    "Hot Since 82":         ["tech-house", "deep-house", "driving", "progressive"],
+    "Patrick Topping":      ["tech-house", "driving", "underground", "club"],
+    "Gorgon City":          ["uk-garage", "house", "deep-house", "soulful"],
+    "Eats Everything":      ["tech-house", "driving", "club", "funky"],
+    "Richy Ahmed":          ["tech-house", "deep-house", "dark", "underground"],
+    "DJ Harvey":            ["disco", "house", "eclectic", "classic"],
+    "Larry Heard":          ["deep-house", "chicago-house", "soulful", "classic"],
+    "Frankie Knuckles":     ["house", "chicago-house", "classic", "soulful"],
+    "Ron Hardy":            ["house", "chicago-house", "underground", "classic"],
+    "Larry Levan":          ["garage-house", "deep-house", "soulful", "classic"],
+    "Honey Dijon":          ["house", "disco", "funky", "club"],
+    "Artwork":              ["electro-house", "big-room", "festival", "energetic"],
+    "Boys Noize":           ["electro", "techno", "dark", "industrial"],
+    "Crookers":             ["electro-house", "hip-hop", "funky", "bass"],
+    "Bakermat":             ["deep-house", "nu-disco", "soulful", "melodic"],
+    "Oliver":               ["french-house", "electro", "funky", "disco"],
+    "Club Cheval":          ["french-house", "electro", "dark", "club"],
+    "Thomass Jackson":      ["deep-house", "disco", "soulful", "melodic"],
+    "Bicep":                ["melodic-house", "trance", "emotional", "club"],
+    "Mall Grab":            ["lo-fi-house", "underground", "raw", "club"],
+    "DJ Stingray":          ["electro", "techno", "futuristic", "dark"],
+    "Rustie":               ["future-bass", "club", "electronic", "experimental"],
+    "Spor":                 ["drum-and-bass", "neurofunk", "dark", "heavy"],
+    "Andy C":               ["drum-and-bass", "liquid-dnb", "energetic", "club"],
+    "Noisia":               ["drum-and-bass", "neurofunk", "dark", "heavy"],
+    "Logistics":            ["liquid-dnb", "melodic", "uplifting", "drum-and-bass"],
+    "Hybrid Minds":         ["liquid-dnb", "melodic", "emotional", "drum-and-bass"],
+    "Skeptical":            ["drum-and-bass", "deep", "dark", "underground"],
+    "Camo & Krooked":       ["drum-and-bass", "melodic", "festival", "energetic"],
+    "High Contrast":        ["liquid-dnb", "soulful", "melodic", "drum-and-bass"],
+    "LTJ Bukem":            ["liquid-dnb", "atmospheric", "jazz", "drum-and-bass"],
+    "Goldie":               ["drum-and-bass", "jungle", "classic", "dark"],
+    "DJ Hype":              ["drum-and-bass", "jump-up", "energetic", "rave"],
+    "Shy FX":               ["drum-and-bass", "jungle", "uk-garage", "bass"],
+    "General Levy":         ["jungle", "ragga", "bass", "classic"],
+    "Todd Terry":           ["house", "uk-garage", "classic", "driving"],
+    "MJ Cole":              ["uk-garage", "2-step", "soulful", "melodic"],
+    "Craig David":          ["uk-garage", "2-step", "r&b", "soulful"],
+    "El-B":                 ["uk-garage", "grime", "dark", "underground"],
+    "Skepta":               ["grime", "uk-hip-hop", "bass", "urban"],
+    "Wiley":                ["grime", "uk-garage", "urban", "bass"],
+    "Dizzee Rascal":        ["grime", "uk-hip-hop", "energetic", "urban"],
+    "JME":                  ["grime", "uk-hip-hop", "bass", "underground"],
+    "DJ Maphorisa":         ["amapiano", "afro-house", "log-drum", "south-african"],
+    "Kabza De Small":       ["amapiano", "piano", "afro-house", "melodic"],
+    "DBN Gogo":             ["amapiano", "gqom", "afro-house", "energetic"],
+    "Njelic":               ["amapiano", "melodic", "afro-house", "soulful"],
+    "DJ Marlboro":          ["baile-funk", "funk-carioca", "bass", "brazilian"],
+    "MC Kevinho":           ["baile-funk", "pop-funk", "bass", "energetic"],
+    "Anitta":               ["baile-funk", "pop", "latin", "energetic"],
+    "Jose Padilla":         ["balearic", "ambient", "chill", "sunset"],
+    "Panjabi MC":           ["bhangra", "indian", "folk", "energetic"],
+    "RDB":                  ["bhangra", "desi-pop", "indian", "urban"],
+    "Aphex Twin":           ["idm", "experimental", "ambient", "glitch"],
+    "Autechre":             ["idm", "experimental", "glitch", "abstract"],
+    "Squarepusher":         ["idm", "drum-and-bass", "jazz", "experimental"],
+    "Arca":                 ["experimental", "avant-garde", "club", "abstract"],
+    "Four Tet":             ["idm", "folktronica", "ambient", "melodic"],
+    "Dr. Fresch":           ["bass-house", "tech-house", "driving", "club"],
+    "AC Slater":            ["bass-house", "night-bass", "driving", "club"],
+    "Valentino Khan":       ["bass-house", "trap-house", "festival", "bass"],
+    "Tchami":               ["bass-house", "future-house", "driving", "dark"],
+    "Bonobo":               ["downtempo", "electronica", "jazz", "melodic"],
+    "GoGo Penguin":         ["jazz", "electronic", "piano", "melodic"],
+    "Dave Nada":            ["moombahton", "reggaeton", "bass", "latin"],
+    "Dillon Francis":       ["moombahton", "trap", "bass", "festival"],
+    "DJ Snake":             ["latin-edm", "trap", "festival", "pop"],
+    "Nine Inch Nails":      ["industrial", "ebm", "dark", "rock"],
+    "HEALTH":               ["industrial", "noise", "dark", "aggressive"],
+    "Ricardo Villalobos":   ["minimal-techno", "micro-house", "hypnotic", "underground"],
+    "Richie Hawtin":        ["minimal-techno", "techno", "dark", "industrial"],
+    "Plastikman":           ["minimal-techno", "acid", "hypnotic", "dark"],
+    "Robert Hood":          ["minimal-techno", "detroit-techno", "functional", "dark"],
+    "Astrix":               ["psytrance", "goa", "psychedelic", "festival"],
+    "Infected Mushroom":    ["psytrance", "progressive-psytrance", "psychedelic"],
+    "Vini Vici":            ["full-on-psytrance", "festival", "uplifting", "psychedelic"],
+    "Ace Ventura":          ["progressive-psytrance", "melodic", "psychedelic"],
+    "Shpongle":             ["psybient", "ambient", "psychedelic", "world"],
+})
 
 MOOD_MAP = {
     "energetic":    ["uplifting", "festival", "hype", "driving"],
@@ -84,25 +193,6 @@ MOOD_MAP = {
     "aggressive":   ["heavy", "bass", "industrial", "raw"],
     "underground":  ["minimal", "deep", "hypnotic", "dark"],
 }
-
-
-async def get_mubert_token() -> str:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.mubert.com/v2/GetServiceAccess",
-            json={
-                "method": "GetServiceAccess",
-                "params": {
-                    "email": MUBERT_EMAIL,
-                    "license": "ttmmubertlicense",
-                    "token": MUBERT_API_KEY,
-                    "mode": "loop"
-                }
-            }
-        )
-        data = resp.json()
-        return data.get("data", {}).get("pat", "")
-
 
 DEMO_TRACKS = {
     "energetic":  "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
@@ -118,158 +208,74 @@ def _demo_track(mood: str, style: str, all_tags: list, duration: int) -> dict:
     return {"url": url, "style": style, "tags": all_tags, "duration": duration, "demo": True}
 
 
-async def generate_track(style: str, duration: int = 60, mood: str = "energetic") -> dict:
+async def get_or_create_customer(user_id: str) -> tuple[str, str]:
+    """Get or create a Mubert customer for this user. Returns (customer_id, access_token)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{MUBERT_BASE}/service/customers",
+            headers=company_headers(),
+            json={"custom_id": user_id}
+        )
+        data = resp.json()
+        customer = data.get("data", {})
+        cid = customer.get("id", "")
+        token = (customer.get("access") or {}).get("token", "")
+        return cid, token
+
+
+async def generate_track(style: str, duration: int = 60, mood: str = "energetic", user_id: str = "anonymous") -> dict:
     try:
         tags = DJ_STYLE_MAP.get(style) or ["edm", "progressive-house"]
         mood_tags = MOOD_MAP.get(mood) or []
         all_tags = list(set(tags + mood_tags))[:5]
     except Exception:
-        tags, mood_tags, all_tags = ["edm"], [], ["edm"]
+        all_tags = ["edm", "progressive-house"]
 
-    # Always use demo if no key or demo mode set
-    if not MUBERT_API_KEY or os.getenv("DEMO_MODE", "").lower() in ("true", "1", "yes"):
+    if not MUBERT_COMPANY_ID or not MUBERT_LICENSE_TOKEN or os.getenv("DEMO_MODE", "").lower() in ("true", "1"):
         return _demo_track(mood, style, all_tags, duration)
 
     try:
-        pat = await get_mubert_token()
-        if not pat:
+        # 1. Register/get customer token
+        cid, access_token = await get_or_create_customer(user_id)
+        if not cid or not access_token:
             return _demo_track(mood, style, all_tags, duration)
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        # 2. Generate track
+        async with httpx.AsyncClient(timeout=90) as client:
             resp = await client.post(
-                "https://api.mubert.com/v2/RecordTrackTTM",
+                f"{MUBERT_BASE}/public/tracks",
+                headers=customer_headers(cid, access_token),
                 json={
-                    "method": "RecordTrackTTM",
-                    "params": {
-                        "pat": pat,
-                        "tags": all_tags,
-                        "duration": duration,
-                        "mode": "track",
-                        "bitmask": 1
-                    }
+                    "tags": all_tags,
+                    "duration": duration,
+                    "mode": "track",
+                    "intensity": "high",
+                    "format": "mp3",
+                    "bitrate": 128
                 }
             )
             data = resp.json()
-            tasks = (data.get("data") or {}).get("tasks") or []
-            track_url = tasks[0].get("download_link", "") if tasks else ""
-            if not track_url:
+            track = data.get("data", {})
+            track_id = track.get("id", "")
+
+            if not track_id:
                 return _demo_track(mood, style, all_tags, duration)
-            return {"url": track_url, "style": style, "tags": all_tags, "duration": duration}
-    except Exception:
+
+            # 3. Poll for completion (up to 60s)
+            for _ in range(20):
+                await asyncio.sleep(3)
+                poll = await client.get(
+                    f"{MUBERT_BASE}/public/tracks/{track_id}",
+                    headers=customer_headers(cid, access_token)
+                )
+                pd = poll.json().get("data", {})
+                gens = pd.get("generations", [])
+                if gens:
+                    url = gens[0].get("url", "")
+                    if url:
+                        return {"url": url, "style": style, "tags": all_tags, "duration": duration}
+
         return _demo_track(mood, style, all_tags, duration)
-
-# Additional artists added in v2
-DJ_STYLE_MAP.update({
-    "Above & Beyond":       ["trance", "progressive-trance", "emotional", "uplifting"],
-    "Dash Berlin":          ["trance", "uplifting-trance", "melodic"],
-    "SPFDJ":                ["hard-techno", "techno", "industrial", "dark"],
-    "I Hate Models":        ["techno", "industrial", "dark", "raw"],
-    "Massano":              ["melodic-techno", "afterlife", "dark", "cinematic"],
-    "Innellea":             ["melodic-techno", "organic", "atmospheric"],
-    "Stephan Bodzin":       ["melodic-techno", "hypnotic", "driving", "dark"],
-    "MK":                   ["house", "uk-garage", "deep-house", "soulful"],
-    "Todd Terry":           ["house", "classic-house", "club", "soulful"],
-    "Larry Heard":          ["deep-house", "chicago-house", "ambient", "spiritual"],
-    "Marshall Jefferson":   ["chicago-house", "gospel-house", "classic"],
-    "Patrick Topping":      ["tech-house", "driving", "underground"],
-    "Hot Since 82":         ["tech-house", "deep-house", "club"],
-    "Kerri Chandler":       ["deep-house", "soulful", "classic"],
-    "Themba":               ["afro-house", "deep-house", "organic"],
-    "Enoo Napa":            ["afro-house", "dark", "tribal"],
-    "Hromoy":               ["organic-house", "afro-house", "melodic"],
-    "Justice":              ["electro", "french-house", "rock-edm", "distorted"],
-    "Boys Noize":           ["electro", "techno", "dark", "industrial"],
-    "DJ Pierre":            ["acid-house", "chicago-house", "classic"],
-    "Aphex Twin":           ["acid-techno", "experimental", "ambient", "idm"],
-    "Luke Vibert":          ["acid", "breakbeat", "experimental"],
-    "Slushii":              ["future-bass", "melodic", "happy"],
-    "Svdden Death":         ["riddim", "heavy-dubstep", "dark", "bass"],
-    "Zomboy":               ["dubstep", "bass", "heavy", "energetic"],
-    "Andy C":               ["drum-and-bass", "liquid-dnb", "technical"],
-    "Goldie":               ["jungle", "drum-and-bass", "classic", "atmospheric"],
-    "Roni Size":            ["drum-and-bass", "jazz-dnb", "classic"],
-    "MJ Cole":              ["uk-garage", "2-step", "soulful"],
-    "Craig David":          ["uk-garage", "2-step", "soulful", "pop"],
-    "Artful Dodger":        ["uk-garage", "2-step", "classic"],
-    "Flosstradamus":        ["trap", "festival-trap", "bass"],
-    "UZ":                   ["trap", "future-trap", "bass", "dark"],
-    "Thomas Jack":          ["tropical-house", "chill", "melodic"],
-    "Klingande":            ["tropical-house", "saxophone-house", "chill"],
-    "Tycho":                ["ambient", "downtempo", "chillwave", "instrumental"],
-    "Bonobo":               ["downtempo", "ambient", "jazz", "electronic"],
-    "Boards of Canada":     ["ambient", "idm", "nostalgic", "atmospheric"],
-    "Brian Eno":            ["ambient", "experimental", "atmospheric"],
-    "Parcels":              ["nu-disco", "funk", "indie-dance"],
-    "Chromeo":              ["nu-disco", "funk", "electro-pop"],
-    "Tensnake":             ["nu-disco", "deep-house", "funk"],
-    "Todd Terje":           ["nu-disco", "italo-disco", "funk"],
-    "Headhunterz":          ["hardstyle", "festival", "uplifting"],
-    "Brennan Heart":        ["hardstyle", "emotional-hardstyle", "uplifting"],
-    "Zatox":                ["hardcore", "hardstyle", "energetic"],
-    "Angerfist":            ["hardcore", "industrial", "dark", "aggressive"],
-    "The Prodigy":          ["breakbeat", "rave", "big-beat", "aggressive"],
-    "Crystal Method":       ["breakbeat", "big-beat", "electro"],
-    "Fatboy Slim":          ["big-beat", "breakbeat", "funk", "house"],
-    "Chemical Brothers":    ["big-beat", "breakbeat", "techno", "rock-edm"],
-})
-
-# Full genre expansion v3 — all EDM genres
-DJ_STYLE_MAP.update({
-    # Minimal Techno
-    "Ricardo Villalobos":   ["minimal-techno", "micro-house", "hypnotic", "underground"],
-    "Richie Hawtin":        ["minimal-techno", "techno", "dark", "industrial"],
-    "Plastikman":           ["minimal-techno", "acid", "hypnotic", "dark"],
-    "Robert Hood":          ["minimal-techno", "detroit-techno", "functional", "dark"],
-    # Psytrance / Goa
-    "Astrix":               ["psytrance", "goa", "psychedelic", "festival"],
-    "Infected Mushroom":    ["psytrance", "progressive-psytrance", "psychedelic"],
-    "Vini Vici":            ["full-on-psytrance", "festival", "uplifting", "psychedelic"],
-    "Ace Ventura":          ["progressive-psytrance", "melodic", "psychedelic"],
-    "Shpongle":             ["psybient", "ambient", "psychedelic", "world"],
-    # Grime
-    "Skepta":               ["grime", "uk-hip-hop", "bass", "urban"],
-    "Wiley":                ["grime", "uk-garage", "urban", "bass"],
-    "Dizzee Rascal":        ["grime", "uk-hip-hop", "energetic", "urban"],
-    "JME":                  ["grime", "uk-hip-hop", "bass", "underground"],
-    # Amapiano
-    "DJ Maphorisa":         ["amapiano", "afro-house", "log-drum", "south-african"],
-    "Kabza De Small":       ["amapiano", "piano", "afro-house", "melodic"],
-    "DBN Gogo":             ["amapiano", "gqom", "afro-house", "energetic"],
-    "Njelic":               ["amapiano", "melodic", "afro-house", "soulful"],
-    # Baile Funk
-    "DJ Marlboro":          ["baile-funk", "funk-carioca", "bass", "brazilian"],
-    "MC Kevinho":           ["baile-funk", "pop-funk", "bass", "energetic"],
-    "Anitta":               ["baile-funk", "pop", "latin", "energetic"],
-    # Balearic Beat
-    "Jose Padilla":         ["balearic", "ambient", "chill", "sunset"],
-    "Ibizan Style":         ["balearic", "house", "chill", "atmospheric"],
-    "Alex Paterson":        ["balearic", "ambient", "psychedelic", "atmospheric"],
-    # Bhangra
-    "Panjabi MC":           ["bhangra", "indian", "folk", "energetic"],
-    "RDB":                  ["bhangra", "desi-pop", "indian", "urban"],
-    "Surjit Bindrakhia":    ["bhangra", "traditional", "folk", "indian"],
-    # IDM / Experimental
-    "Autechre":             ["idm", "experimental", "glitch", "abstract"],
-    "Squarepusher":         ["idm", "drum-and-bass", "jazz", "experimental"],
-    "Arca":                 ["experimental", "avant-garde", "club", "abstract"],
-    "Four Tet":             ["idm", "folktronica", "ambient", "melodic"],
-    # Bass House
-    "Dr. Fresch":           ["bass-house", "tech-house", "driving", "club"],
-    "AC Slater":            ["bass-house", "night-bass", "driving", "club"],
-    "Valentino Khan":       ["bass-house", "trap-house", "festival", "bass"],
-    "Tchami":               ["bass-house", "future-house", "driving", "dark"],
-    # Jazz Fusion / Electronica
-    "GoGo Penguin":         ["jazz", "electronic", "piano", "melodic"],
-    "Alfa Mist":            ["jazz-fusion", "electronic", "soulful", "melodic"],
-    "Hiatus Kaiyote":       ["neo-soul", "electronic", "jazz", "soulful"],
-    # Moombahton / Latin
-    "Dave Nada":            ["moombahton", "reggaeton", "bass", "latin"],
-    "Dillon Francis":       ["moombahton", "trap", "bass", "festival"],
-    "DJ Snake":             ["latin-edm", "trap", "festival", "pop"],
-    "Bad Bunny Style":      ["reggaeton", "latin-trap", "bass", "urban"],
-    # Industrial / EBM
-    "Nine Inch Nails":      ["industrial", "ebm", "dark", "rock"],
-    "HEALTH":               ["industrial", "noise", "dark", "aggressive"],
-    "Skinny Puppy":         ["ebm", "industrial", "dark", "electronic"],
-    "Front Line Assembly":  ["ebm", "industrial", "futuristic", "dark"],
-})
+    except Exception as e:
+        print(f"Mubert error: {e}")
+        return _demo_track(mood, style, all_tags, duration)
