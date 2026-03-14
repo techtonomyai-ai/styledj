@@ -13,3 +13,4 @@ librosa==0.10.1
 numpy==1.26.4
 soundfile==0.12.1
 resend==0.7.2
+anthropic==0.49.0

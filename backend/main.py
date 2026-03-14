@@ -238,6 +238,55 @@ async def me(user_id: str = Depends(verify_token)):
         "created_at": user["created_at"]
     }
 
+class LyricsRequest(BaseModel):
+    style: str
+    theme: str = ""
+    mood: str = "energetic"
+
+@app.post("/lyrics")
+async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_token)):
+    if not is_subscribed(user_id):
+        raise HTTPException(status_code=402, detail="Subscription required.")
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        theme_line = f"Theme/vibe: {req.theme}" if req.theme else "Theme: freedom, energy, the night"
+        msg = client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=600,
+            messages=[{
+                "role": "user",
+                "content": f"""Write song lyrics for an EDM track in the style of {req.style}.
+{theme_line}
+Mood: {req.mood}
+
+Format:
+[Verse 1]
+(4-6 lines)
+
+[Pre-Chorus]
+(2-4 lines)
+
+[Chorus]
+(4-6 lines, memorable and repeated)
+
+[Verse 2]
+(4-6 lines)
+
+[Chorus]
+(repeat)
+
+[Outro]
+(2-4 lines)
+
+Make them punchy, emotional, festival-ready. Use simple words that sound great when sung."""
+            }]
+        )
+        lyrics = msg.content[0].text
+        return {"lyrics": lyrics, "style": req.style, "theme": req.theme}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lyrics generation failed: {str(e)}")
+
 @app.post("/generate")
 async def generate(req: GenerateRequest, user_id: str = Depends(verify_token)):
     if not is_subscribed(user_id):

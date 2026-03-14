@@ -114,6 +114,7 @@
   <div style="display:flex;gap:8px;margin-bottom:16px;">
     <button id="tab-style" onclick="switchTab('style')" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff;font-weight:700;cursor:pointer;font-size:0.95rem;">🎧 DJ Style</button>
     <button id="tab-match" onclick="switchTab('match')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">🎵 Sound Match</button>
+    <button id="tab-lyrics" onclick="switchTab('lyrics')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">✍️ Lyrics</button>
   </div>
 
   <!-- SOUND MATCH TAB -->
@@ -473,6 +474,55 @@
     </div>
   </div>
 
+  <!-- LYRICS TAB -->
+  <div id="panel-lyrics" class="card" style="display:none;">
+    <h2 style="text-align:center;margin-bottom:20px;">✍️ AI Lyrics Generator</h2>
+
+    <div class="form-group">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:8px;">DJ Style</label>
+      <select id="lyricsStyle" style="width:100%;background:#0D0D15;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:0.95rem;">
+        <option>Martin Garrix</option><option>Anyma</option><option>Armin van Buuren</option>
+        <option>Avicii</option><option>Calvin Harris</option><option>Charlotte de Witte</option>
+        <option>David Guetta</option><option>deadmau5</option><option>Daft Punk</option>
+        <option>Illenium</option><option>Kygo</option><option>Marshmello</option>
+        <option>Porter Robinson</option><option>Skrillex</option><option>Tiësto</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:8px;">Theme / Vibe <span style="color:#555;">(optional)</span></label>
+      <input id="lyricsTheme" type="text" placeholder="e.g. lost in the night, chasing dreams, summer love..." 
+        style="width:100%;background:#0D0D15;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:0.95rem;box-sizing:border-box;"/>
+    </div>
+
+    <div class="form-group" style="display:flex;gap:8px;flex-wrap:wrap;" id="lyricsMoodBtns">
+      <button onclick="setLyricsMood('energetic')" class="mood-btn active" data-mood="energetic">⚡ Energetic</button>
+      <button onclick="setLyricsMood('euphoric')" class="mood-btn" data-mood="euphoric">🌟 Euphoric</button>
+      <button onclick="setLyricsMood('dark')" class="mood-btn" data-mood="dark">🌑 Dark</button>
+      <button onclick="setLyricsMood('chill')" class="mood-btn" data-mood="chill">🌊 Chill</button>
+    </div>
+
+    <button onclick="generateLyrics()" id="lyricsBtn" class="generate-btn">✍️ Generate Lyrics</button>
+    <div id="lyricsLoading" style="display:none;text-align:center;padding:20px;color:var(--cyan);">
+      <div style="font-size:1.5rem;animation:spin 1s linear infinite;display:inline-block;">⚙️</div>
+      <div style="margin-top:8px;">Writing lyrics...</div>
+    </div>
+
+    <!-- Lyrics output -->
+    <div id="lyricsOutput" style="display:none;margin-top:16px;">
+      <div style="background:#0D0D15;border:1px solid rgba(0,212,255,0.3);border-radius:12px;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <span style="color:var(--cyan);font-weight:700;font-size:0.9rem;" id="lyricsTitle">Lyrics</span>
+          <button onclick="copyLyrics()" style="padding:6px 14px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:6px;color:var(--cyan);font-size:0.8rem;cursor:pointer;">📋 Copy</button>
+        </div>
+        <pre id="lyricsText" style="white-space:pre-wrap;color:#E0E0FF;font-family:inherit;font-size:0.9rem;line-height:1.7;margin:0;"></pre>
+      </div>
+      <button onclick="switchTab('style')" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;">
+        🎧 Generate Track for These Lyrics
+      </button>
+    </div>
+  </div>
+
   <!-- SOUND MATCH TAB (handled above) -->
   </div>
 </div>
@@ -561,13 +611,67 @@
   function scrollToPricing() { document.getElementById('pricing').scrollIntoView({behavior:'smooth'}); }
 
   // --- TABS ---
+  // --- LYRICS ---
+  let lyricsMood = 'energetic';
+
+  function setLyricsMood(mood) {
+    lyricsMood = mood;
+    document.querySelectorAll('#lyricsMoodBtns .mood-btn').forEach(b => {
+      const active = b.dataset.mood === mood;
+      b.style.background = active ? 'linear-gradient(135deg,var(--purple),var(--cyan))' : 'rgba(255,255,255,0.05)';
+      b.style.color = active ? '#fff' : 'var(--muted)';
+      b.style.borderColor = active ? 'transparent' : 'var(--border)';
+    });
+  }
+
+  async function generateLyrics() {
+    if (!token) { showAuthModal('register'); return; }
+    const style = document.getElementById('lyricsStyle').value;
+    const theme = document.getElementById('lyricsTheme').value;
+    document.getElementById('lyricsBtn').disabled = true;
+    document.getElementById('lyricsLoading').style.display = 'block';
+    document.getElementById('lyricsOutput').style.display = 'none';
+    try {
+      const res = await fetch(`${API}/lyrics`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body: JSON.stringify({style, theme, mood: lyricsMood})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 402) { subscribe(); return; }
+        throw new Error(data.detail || 'Lyrics generation failed');
+      }
+      document.getElementById('lyricsTitle').textContent = `✍️ ${style} · ${lyricsMood}`;
+      document.getElementById('lyricsText').textContent = data.lyrics;
+      document.getElementById('lyricsOutput').style.display = 'block';
+      document.getElementById('lyricsOutput').scrollIntoView({behavior:'smooth', block:'start'});
+    } catch(e) {
+      showToast('⚠️ ' + (e.message || 'Could not generate lyrics'));
+    } finally {
+      document.getElementById('lyricsBtn').disabled = false;
+      document.getElementById('lyricsLoading').style.display = 'none';
+    }
+  }
+
+  function copyLyrics() {
+    const text = document.getElementById('lyricsText').textContent;
+    navigator.clipboard.writeText(text).then(() => showToast('✅ Lyrics copied!', 2000));
+  }
+
   function switchTab(tab) {
-    document.getElementById('panel-style').style.display = tab === 'style' ? 'block' : 'none';
-    document.getElementById('panel-match').style.display = tab === 'match' ? 'block' : 'none';
-    const activeStyle = 'background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff;border:none;';
-    const inactiveStyle = 'background:var(--card);color:var(--muted);border:2px solid var(--border);';
-    document.getElementById('tab-style').style.cssText += tab === 'style' ? activeStyle : inactiveStyle;
-    document.getElementById('tab-match').style.cssText += tab === 'match' ? activeStyle : inactiveStyle;
+    ['style','match','lyrics'].forEach(t => {
+      document.getElementById(`panel-${t}`).style.display = tab === t ? 'block' : 'none';
+      const el = document.getElementById(`tab-${t}`);
+      if (!el) return;
+      if (tab === t) {
+        el.style.background = 'linear-gradient(135deg,var(--purple),var(--cyan))';
+        el.style.color = '#fff'; el.style.border = 'none';
+      } else {
+        el.style.background = 'var(--card)';
+        el.style.color = 'var(--muted)'; el.style.border = '2px solid var(--border)';
+      }
+    });
   }
 
   // --- RECORDING ---
