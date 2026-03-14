@@ -240,13 +240,14 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
         if not cid or not access_token:
             return _demo_track(mood, style, all_tags, duration)
 
-        # 2. Generate track
+        # 2. Generate track via prompt (v3 TTM)
+        prompt = " ".join(all_tags) + f" {style} music"
         async with httpx.AsyncClient(timeout=90) as client:
             resp = await client.post(
                 f"{MUBERT_BASE}/public/tracks",
                 headers=customer_headers(cid, access_token),
                 json={
-                    "tags": all_tags,
+                    "prompt": prompt,
                     "duration": duration,
                     "mode": "track",
                     "intensity": "high",
@@ -255,20 +256,22 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
                 }
             )
             data = resp.json()
-            track = data.get("data", {})
+            track_data = data.get("data", {})
+            track = track_data[0] if isinstance(track_data, list) else track_data
             track_id = track.get("id", "")
 
             if not track_id:
                 return _demo_track(mood, style, all_tags, duration)
 
-            # 3. Poll for completion (up to 60s)
+            # 3. Poll for completion (up to 80s)
             for _ in range(20):
-                await asyncio.sleep(3)
+                await asyncio.sleep(4)
                 poll = await client.get(
                     f"{MUBERT_BASE}/public/tracks/{track_id}",
                     headers=customer_headers(cid, access_token)
                 )
-                pd = poll.json().get("data", {})
+                pd_raw = poll.json().get("data", {})
+                pd = pd_raw[0] if isinstance(pd_raw, list) else pd_raw
                 gens = pd.get("generations", [])
                 if gens:
                     url = gens[0].get("url", "")
