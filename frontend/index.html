@@ -534,6 +534,14 @@
 
 <script>
   const API = window.location.origin;
+
+  function showToast(msg, duration=4000) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1E1E2E;color:#E0E0FF;padding:14px 22px;border-radius:12px;border:1px solid #FF6B6B;font-size:0.9rem;z-index:9999;max-width:320px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), duration);
+  }
   let token = localStorage.getItem('styledj_token');
   let currentMood = 'energetic';
   let currentTrackUrl = '';
@@ -740,7 +748,7 @@
       document.getElementById('matchTrackInfo').textContent = `⚡ Sound Match — ${data.genre} • ${Math.round(duration/60)} min`;
       document.getElementById('matchPlayer').style.display = 'block';
     } catch(e) {
-      alert('Error: ' + e.message);
+      showToast('⚠️ ' + (e.message || 'Something went wrong'));
     } finally {
       document.getElementById('matchBtn').disabled = false;
       document.getElementById('matchLoading').style.display = 'none';
@@ -786,7 +794,7 @@
       document.getElementById('player').style.display = 'block';
       document.getElementById('player').scrollIntoView({behavior:'smooth', block:'center'});
     } catch(e) {
-      alert('Error: ' + e.message);
+      document.getElementById('playerReady').innerHTML = `<div style="font-size:1.5rem;margin-bottom:8px;">⚠️</div><div style="color:#FF6B6B;font-size:0.9rem;">${e.message || 'Generation failed — please try again'}</div>`;
     } finally {
       document.getElementById('generateBtn').disabled = false;
       document.getElementById('loading').style.display = 'none';
@@ -903,7 +911,7 @@
       localStorage.setItem('styledj_token', token);
       document.getElementById('authModal').remove();
       alert(mode === 'login' ? '✅ Welcome back!' : '🎉 Account created! 3-day free trial started.');
-    } catch(e) { alert('Error: ' + e.message); }
+    } catch(e) { showToast('⚠️ ' + (e.message || 'Something went wrong')); }
   }
 
   async function showForgotPassword() {
@@ -916,7 +924,7 @@
         body: JSON.stringify({email, password: ''})
       });
       alert('📧 If that email exists, a reset link has been sent. Check your inbox!');
-    } catch(e) { alert('Error sending reset email. Please try again.'); }
+    } catch(e) { showToast('⚠️ Could not send reset email. Try again.'); }
   }
 
   async function startTrial() {
@@ -935,7 +943,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
       window.location.href = data.checkout_url;
-    } catch(e) { alert('Error: ' + e.message); }
+    } catch(e) { showToast('⚠️ ' + (e.message || 'Something went wrong')); }
   }
 </script>
 </body>

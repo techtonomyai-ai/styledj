@@ -229,8 +229,8 @@ async def get_or_create_customer(user_id: str) -> tuple[str, str]:
 
 async def generate_track(style: str, duration: int = 60, mood: str = "energetic", user_id: str = "anonymous") -> dict:
     try:
-        tags = DJ_STYLE_MAP.get(style) or ["edm", "progressive-house"]
-        mood_tags = MOOD_MAP.get(mood) or []
+        tags = list(DJ_STYLE_MAP.get(style) or ["edm", "progressive-house"])
+        mood_tags = list(MOOD_MAP.get(mood) or [])
         all_tags = list(set(tags + mood_tags))[:5]
     except Exception:
         all_tags = ["edm", "progressive-house"]
@@ -239,48 +239,39 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
         return _demo_track(mood, style, all_tags, duration)
 
     try:
-        # 1. Register/get customer token
         cid, access_token = await get_or_create_customer(user_id)
         if not cid or not access_token:
             return _demo_track(mood, style, all_tags, duration)
 
-        # 2. Generate track via prompt (v3 TTM)
         prompt = " ".join(all_tags) + f" {style} music"
-        async with httpx.AsyncClient(timeout=90) as client:
-            resp = await client.post(
-                f"{MUBERT_BASE}/public/tracks",
-                headers=customer_headers(cid, access_token),
-                json={
-                    "prompt": prompt,
-                    "duration": duration,
-                    "mode": "track",
-                    "intensity": "high",
-                    "format": "mp3",
-                    "bitrate": 128
-                }
-            )
-            data = resp.json()
-            track_data = data.get("data", {})
-            track = track_data[0] if isinstance(track_data, list) else track_data
-            track_id = track.get("id", "")
+        cu_hdrs = customer_headers(cid, access_token)
 
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp = await client.post(f"{MUBERT_BASE}/public/tracks", headers=cu_hdrs, json={
+                "prompt": prompt, "duration": duration,
+                "mode": "track", "intensity": "high", "format": "mp3", "bitrate": 128
+            })
+            resp_json = resp.json() if resp.content else {}
+            raw = resp_json.get("data") if isinstance(resp_json, dict) else None
+            if isinstance(raw, list):
+                track = raw[0] if raw else {}
+            elif isinstance(raw, dict):
+                track = raw
+            else:
+                return _demo_track(mood, style, all_tags, duration)
+            track_id = track.get("id", "") if isinstance(track, dict) else ""
             if not track_id:
                 return _demo_track(mood, style, all_tags, duration)
 
-            # 3. Poll for completion (up to 80s)
             for _ in range(20):
                 await asyncio.sleep(4)
                 try:
-                    poll = await client.get(
-                        f"{MUBERT_BASE}/public/tracks/{track_id}",
-                        headers=customer_headers(cid, access_token)
-                    )
-                    pd_raw = (poll.json() or {}).get("data") or {}
-                    pd = pd_raw[0] if isinstance(pd_raw, list) and pd_raw else pd_raw
-                    if not isinstance(pd, dict):
-                        continue
-                    gens = pd.get("generations") or []
-                    if gens and isinstance(gens[0], dict):
+                    poll = await client.get(f"{MUBERT_BASE}/public/tracks/{track_id}", headers=cu_hdrs)
+                    pj = poll.json() if poll.content else {}
+                    p_raw = pj.get("data") if isinstance(pj, dict) else None
+                    pd = (p_raw[0] if p_raw else {}) if isinstance(p_raw, list) else (p_raw if isinstance(p_raw, dict) else {})
+                    gens = pd.get("generations") if isinstance(pd, dict) else None
+                    if isinstance(gens, list) and gens and isinstance(gens[0], dict):
                         url = gens[0].get("url", "")
                         if url:
                             return {"url": url, "style": style, "tags": all_tags, "duration": duration}
@@ -289,5 +280,6 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
 
         return _demo_track(mood, style, all_tags, duration)
     except Exception as e:
-        print(f"Mubert error: {e}")
+        print(f"Mubert generate error: {e}")
         return _demo_track(mood, style, all_tags, duration)
+
