@@ -268,8 +268,9 @@ async def get_track(track_id: str, user_id: str = Depends(verify_token)):
 @app.post("/analyze")
 async def analyze_sound(file: UploadFile = File(...), user_id: str = Depends(verify_token)):
     """Upload an audio file — AI analyzes BPM, key, energy and maps to a genre style."""
-    allowed = ["audio/mpeg", "audio/wav", "audio/mp3", "audio/ogg", "audio/flac", "audio/x-wav"]
-    if file.content_type not in allowed and not file.filename.endswith((".mp3",".wav",".ogg",".flac")):
+    allowed = ["audio/mpeg", "audio/wav", "audio/mp3", "audio/ogg", "audio/flac", "audio/x-wav",
+               "audio/mp4", "audio/x-m4a", "audio/aac", "audio/webm", "audio/x-mp4", "video/mp4"]
+    if file.content_type not in allowed and not file.filename.endswith((".mp3",".wav",".ogg",".flac",".mp4",".m4a",".aac",".webm")):
         raise HTTPException(status_code=400, detail="Please upload an MP3, WAV, OGG, or FLAC file.")
     
     audio_bytes = await file.read()

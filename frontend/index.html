@@ -581,7 +581,12 @@
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      // Pick best supported format (iOS Safari uses mp4, Android/Chrome uses webm)
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                     : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                     : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
+                     : '';
+      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordChunks.push(e.data); };
       mediaRecorder.onstop = processRecording;
       mediaRecorder.start();
@@ -622,11 +627,13 @@
   }
 
   async function processRecording() {
-    const blob = new Blob(recordChunks, { type: 'audio/webm' });
+    const mimeType = mediaRecorder.mimeType || 'audio/mp4';
+    const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'mp4';
+    const blob = new Blob(recordChunks, { type: mimeType });
     document.getElementById('dropzone').innerHTML = `<div style="font-size:2rem">⏳</div><div style="margin-top:8px;color:var(--cyan)">Analyzing recorded audio...</div>`;
 
     const formData = new FormData();
-    formData.append('file', blob, 'recording.webm');
+    formData.append('file', blob, `recording.${ext}`);
     try {
       const res = await fetch(`${API}/analyze`, {
         method: 'POST',
