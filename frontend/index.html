@@ -449,10 +449,27 @@
       <p style="margin-top:12px;color:var(--muted)">AI is composing your track...</p>
     </div>
 
-    <div class="player" id="player">
-      <div class="track-info" id="trackInfo" style="color:#555;text-align:center;padding:8px 0;">🎵 Generate a track to play it here</div>
-      <audio id="audioPlayer" controls style="width:100%;margin-bottom:12px;display:none;"></audio>
-      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()" style="padding:14px;font-size:1rem;font-weight:700;display:none;">💾 Save Track</button>
+    <!-- READY STATE -->
+    <div id="playerReady" style="text-align:center;padding:24px;color:#333;border:2px dashed #1E1E2E;border-radius:12px;margin-top:8px;">
+      <div style="font-size:2rem;margin-bottom:8px;">🎵</div>
+      <div style="color:#555;font-size:0.9rem;">Your track will appear here</div>
+    </div>
+
+    <!-- TRACK CARD (shown after generation) -->
+    <div id="player" style="display:none;margin-top:8px;">
+      <div style="background:linear-gradient(135deg,rgba(123,47,190,0.2),rgba(0,212,255,0.15));border:1px solid rgba(0,212,255,0.3);border-radius:16px;padding:20px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+          <div style="width:52px;height:52px;background:linear-gradient(135deg,var(--purple),var(--cyan));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;">🎛️</div>
+          <div>
+            <div id="trackInfo" style="font-weight:700;font-size:1rem;color:#E0E0FF;">Track Ready</div>
+            <div style="color:var(--cyan);font-size:0.8rem;margin-top:2px;">✅ AI Generated · Royalty-Free</div>
+          </div>
+        </div>
+        <audio id="audioPlayer" controls style="width:100%;margin-bottom:14px;border-radius:8px;"></audio>
+        <button onclick="downloadTrack()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">
+          💾 Save Track
+        </button>
+      </div>
     </div>
   </div>
 
@@ -757,10 +774,10 @@
       ap.src = data.download_url;
       ap.crossOrigin = 'anonymous';
       ap.onerror = () => { ap.removeAttribute('crossorigin'); ap.src = data.download_url; };
-      document.getElementById('trackInfo').textContent = `🎵 ${style} style • ${duration}s • ${currentMood}`;
-      document.getElementById('trackInfo').style.color = 'var(--cyan)';
-      document.getElementById('audioPlayer').style.display = 'block';
-      document.getElementById('downloadBtn').style.display = 'block';
+      document.getElementById('trackInfo').textContent = `${style} · ${duration}s · ${currentMood}`;
+      document.getElementById('playerReady').style.display = 'none';
+      document.getElementById('player').style.display = 'block';
+      document.getElementById('player').scrollIntoView({behavior:'smooth', block:'center'});
     } catch(e) {
       alert('Error: ' + e.message);
     } finally {
