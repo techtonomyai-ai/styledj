@@ -42,6 +42,8 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+ADMIN_EMAILS = ["techtonomyllc@gmail.com", "techtonomy.ai@gmail.com"]
+
 def init_db():
     conn = get_db()
     conn.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -71,6 +73,19 @@ def init_db():
     conn.close()
 
 init_db()
+
+def ensure_admin_subscribed():
+    """Keep admin/test accounts subscribed across redeploys."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET subscribed=1 WHERE email IN ({})".format(
+            ",".join("?" * len(ADMIN_EMAILS))
+        ), ADMIN_EMAILS
+    )
+    conn.commit()
+    conn.close()
+
+ensure_admin_subscribed()
 
 # --- Auth ---
 def hash_password(pw: str) -> str:
@@ -141,8 +156,9 @@ async def register(req: RegisterRequest):
     user_id = str(uuid.uuid4())
     try:
         conn.execute(
-            "INSERT INTO users (id, email, password_hash, trial_start) VALUES (?,?,?,?)",
-            (user_id, req.email, hash_password(req.password), datetime.utcnow().isoformat())
+            "INSERT INTO users (id, email, password_hash, trial_start, subscribed) VALUES (?,?,?,?,?)",
+            (user_id, req.email, hash_password(req.password), datetime.utcnow().isoformat(),
+             1 if req.email.lower() in [e.lower() for e in ADMIN_EMAILS] else 0)
         )
         conn.commit()
     except sqlite3.IntegrityError:

@@ -210,16 +210,20 @@ def _demo_track(mood: str, style: str, all_tags: list, duration: int) -> dict:
 
 async def get_or_create_customer(user_id: str) -> tuple[str, str]:
     """Get or create a Mubert customer for this user. Returns (customer_id, access_token)."""
+    # Sanitize user_id for Mubert (only letters, numbers, .-@-)
+    safe_id = "u-" + user_id.replace("_", "-")[:50]
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{MUBERT_BASE}/service/customers",
             headers=company_headers(),
-            json={"custom_id": user_id}
+            json={"custom_id": safe_id}
         )
-        data = resp.json()
-        customer = data.get("data", {})
-        cid = customer.get("id", "")
-        token = (customer.get("access") or {}).get("token", "")
+        data = resp.json() or {}
+        customer = data.get("data") or {}
+        if isinstance(customer, list):
+            customer = customer[0] if customer else {}
+        cid = customer.get("id", "") if isinstance(customer, dict) else ""
+        token = ((customer.get("access") or {}).get("token", "")) if isinstance(customer, dict) else ""
         return cid, token
 
 
@@ -266,17 +270,22 @@ async def generate_track(style: str, duration: int = 60, mood: str = "energetic"
             # 3. Poll for completion (up to 80s)
             for _ in range(20):
                 await asyncio.sleep(4)
-                poll = await client.get(
-                    f"{MUBERT_BASE}/public/tracks/{track_id}",
-                    headers=customer_headers(cid, access_token)
-                )
-                pd_raw = poll.json().get("data", {})
-                pd = pd_raw[0] if isinstance(pd_raw, list) else pd_raw
-                gens = pd.get("generations", [])
-                if gens:
-                    url = gens[0].get("url", "")
-                    if url:
-                        return {"url": url, "style": style, "tags": all_tags, "duration": duration}
+                try:
+                    poll = await client.get(
+                        f"{MUBERT_BASE}/public/tracks/{track_id}",
+                        headers=customer_headers(cid, access_token)
+                    )
+                    pd_raw = (poll.json() or {}).get("data") or {}
+                    pd = pd_raw[0] if isinstance(pd_raw, list) and pd_raw else pd_raw
+                    if not isinstance(pd, dict):
+                        continue
+                    gens = pd.get("generations") or []
+                    if gens and isinstance(gens[0], dict):
+                        url = gens[0].get("url", "")
+                        if url:
+                            return {"url": url, "style": style, "tags": all_tags, "duration": duration}
+                except Exception:
+                    continue
 
         return _demo_track(mood, style, all_tags, duration)
     except Exception as e:
