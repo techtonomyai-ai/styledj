@@ -200,7 +200,7 @@
     <div class="player" id="matchPlayer" style="display:none;">
       <div class="track-info" id="matchTrackInfo"></div>
       <audio id="matchAudioPlayer" controls style="width:100%;margin-bottom:12px;"></audio>
-      <button class="download-btn" onclick="downloadMatchTrack()">⬇ Download Copyright-Free Match</button>
+      <button class="download-btn" onclick="downloadMatchTrackNew()" style="padding:14px;font-size:1rem;font-weight:700;">💾 Save Copyright-Free Match</button>
     </div>
   </div>
 
@@ -452,7 +452,7 @@
     <div class="player" id="player">
       <div class="track-info" id="trackInfo"></div>
       <audio id="audioPlayer" controls></audio>
-      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()">⬇ Download Track</button>
+      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()" style="padding:14px;font-size:1rem;font-weight:700;">💾 Save Track</button>
     </div>
   </div>
 
@@ -762,12 +762,71 @@
     }
   }
 
-  function downloadTrack() {
+  async function downloadTrack() {
     if (!currentTrackUrl) return;
+    const style = document.getElementById('styleSelect').value.replace(/ /g,'_');
+    const filename = `styledj_${style}.mp3`;
+    showSaveModal(currentTrackUrl, filename);
+  }
+
+  function downloadMatchTrackNew() {
+    if (!matchCurrentUrl) return;
+    showSaveModal(matchCurrentUrl, 'styledj_sound_match.mp3');
+  }
+
+  function showSaveModal(url, filename) {
+    const existing = document.getElementById('saveModal');
+    if (existing) existing.remove();
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    const canShare = !!navigator.share;
+
+    const modal = document.createElement('div');
+    modal.id = 'saveModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:1000;display:flex;align-items:flex-end;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:#12121A;border:1px solid #1E1E2E;border-radius:20px 20px 16px 16px;padding:28px;width:100%;max-width:480px;margin-bottom:8px;">
+        <div style="width:40px;height:4px;background:#333;border-radius:2px;margin:0 auto 20px;"></div>
+        <h3 style="text-align:center;margin-bottom:6px;">💾 Save Your Track</h3>
+        <p style="text-align:center;color:#666;font-size:0.85rem;margin-bottom:24px;">${filename}</p>
+
+        ${canShare ? `
+        <button onclick="shareTrack('${url}','${filename}')" style="width:100%;padding:16px;background:linear-gradient(135deg,#7B2FBE,#00D4FF);border:none;border-radius:12px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:12px;">
+          📤 Share / Save to Files
+        </button>` : ''}
+
+        <button onclick="directDownload('${url}','${filename}')" style="width:100%;padding:16px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:12px;color:var(--cyan);font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:12px;">
+          ⬇️ Download MP3
+        </button>
+
+        ${isIOS ? `
+        <button onclick="window.open('${url}','_blank')" style="width:100%;padding:14px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:12px;color:#aaa;font-weight:600;font-size:0.9rem;cursor:pointer;margin-bottom:12px;">
+          🎵 Open in Browser → Long press → Save
+        </button>` : ''}
+
+        <button onclick="document.getElementById('saveModal').remove()" style="width:100%;padding:12px;background:transparent;border:none;color:#555;cursor:pointer;font-size:0.9rem;">
+          Cancel
+        </button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  }
+
+  async function shareTrack(url, filename) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const file = new File([blob], filename, { type: 'audio/mpeg' });
+      await navigator.share({ files: [file], title: 'StyleDJ Track', text: 'My AI-generated track from StyleDJ!' });
+    } catch(e) {
+      directDownload(url, filename);
+    }
+  }
+
+  function directDownload(url, filename) {
     const a = document.createElement('a');
-    a.href = currentTrackUrl;
-    a.download = `styledj_${document.getElementById('styleSelect').value.replace(/ /g,'_')}.mp3`;
-    a.click();
+    a.href = url; a.download = filename; a.target = '_blank';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   }
 
   function showAuthModal(mode = 'register') {
