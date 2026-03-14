@@ -656,7 +656,16 @@
 
   function copyLyrics() {
     const text = document.getElementById('lyricsText').textContent;
-    navigator.clipboard.writeText(text).then(() => showToast('✅ Lyrics copied!', 2000));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => showToast('✅ Lyrics copied!', 2000)).catch(() => fallbackCopy(text));
+    } else { fallbackCopy(text); }
+  }
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); showToast('✅ Lyrics copied!', 2000); } catch(e) { showToast('⚠️ Copy failed — select text manually'); }
+    document.body.removeChild(ta);
   }
 
   function switchTab(tab) {
@@ -689,19 +698,27 @@
   }
 
   async function startRecord() {
-    if (!token) { alert('Please create a free account first!'); startTrial(); return; }
+    if (!token) { showToast('⚠️ Please sign in first'); showAuthModal('register'); return; }
+    // Check browser support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('⚠️ Microphone not supported in this browser. Try Chrome or Safari.');
+      return;
+    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       recordChunks = [];
-      // Pick best supported format (iOS Safari uses mp4, Android/Chrome uses webm)
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-                     : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-                     : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
-                     : '';
-      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordChunks.push(e.data); };
+      // Cross-platform MIME: webm (Chrome/Android/Firefox), mp4 (iOS Safari), fallback default
+      let mimeType = '';
+      const types = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus','audio/ogg'];
+      for (const t of types) { if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; } }
+      try {
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      } catch(e) {
+        mediaRecorder = new MediaRecorder(stream); // fallback — let browser pick
+      }
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordChunks.push(e.data); };
       mediaRecorder.onstop = processRecording;
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // collect chunks every 1s for reliability
 
       // UI
       document.getElementById('recordBtn').style.cssText += 'background:rgba(255,68,68,0.3);border-color:#FF4444;';
@@ -723,7 +740,10 @@
       }, 1000);
 
     } catch(e) {
-      alert('Microphone access denied. Please allow microphone access and try again.');
+      const msg = e.name === 'NotAllowedError' ? 'Microphone permission denied — tap Allow when prompted.'
+                : e.name === 'NotFoundError' ? 'No microphone found on this device.'
+                : 'Could not access microphone: ' + e.message;
+      showToast('⚠️ ' + msg);
     }
   }
 
