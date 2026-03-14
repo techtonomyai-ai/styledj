@@ -350,6 +350,8 @@ async def match_sound(
     user_id: str = Depends(verify_token)
 ):
     """Analyze uploaded audio and generate a copyright-free track matching the vibe."""
+    if not is_subscribed(user_id):
+        raise HTTPException(status_code=402, detail="Subscription required.")
     # Read audio bytes
     audio_bytes = await file.read()
 
@@ -396,17 +398,21 @@ async def match_sound(
     track_data = await gen(detected_style, duration, "energetic")
 
     track_id = str(uuid.uuid4())
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO tracks (id, user_id, style, duration, url, created_at) VALUES (?,?,?,?,?,?)",
-        (track_id, user_id, f"Match: {detected_style}", duration, track_data["url"], datetime.utcnow().isoformat())
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO tracks (id, user_id, style, duration, mood, file_url, tags) VALUES (?,?,?,?,?,?,?)",
+            (track_id, user_id, f"Match: {detected_style}", duration, "energetic", track_data["url"], ",".join(detected_tags))
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
     return {
         "track_id": track_id,
         "download_url": track_data["url"],
+        "genre": detected_style,
         "detected_style": detected_style,
         "bpm": detected_bpm,
         "energy": detected_energy,
