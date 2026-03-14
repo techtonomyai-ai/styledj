@@ -50,7 +50,7 @@
     .spinner { display:inline-block; width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--cyan); border-radius:50%; animation:spin 0.8s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
     @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(1.3); } }
-    .player { display:none; margin-top:20px; padding:20px; background:#0D0D15; border-radius:10px; border:1px solid var(--border); }
+    .player { margin-top:20px; padding:20px; background:#0D0D15; border-radius:10px; border:1px solid var(--border); }
     .player audio { width:100%; margin-bottom:12px; }
     .download-btn { width:100%; padding:12px; background:transparent; border:1px solid var(--cyan); border-radius:8px; color:var(--cyan); font-weight:600; cursor:pointer; transition:all 0.2s; }
     .download-btn:hover { background:rgba(0,212,255,0.1); }
@@ -450,9 +450,9 @@
     </div>
 
     <div class="player" id="player">
-      <div class="track-info" id="trackInfo"></div>
-      <audio id="audioPlayer" controls></audio>
-      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()" style="padding:14px;font-size:1rem;font-weight:700;">💾 Save Track</button>
+      <div class="track-info" id="trackInfo" style="color:#555;text-align:center;padding:8px 0;">🎵 Generate a track to play it here</div>
+      <audio id="audioPlayer" controls style="width:100%;margin-bottom:12px;display:none;"></audio>
+      <button class="download-btn" id="downloadBtn" onclick="downloadTrack()" style="padding:14px;font-size:1rem;font-weight:700;display:none;">💾 Save Track</button>
     </div>
   </div>
 
@@ -744,6 +744,11 @@
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          token = null; localStorage.removeItem('styledj_token');
+          alert('Session expired — please sign in again.');
+          showAuthModal('login'); return;
+        }
         if (res.status === 402) { alert('Subscribe to generate tracks!'); subscribe(); return; }
         throw new Error(data.detail || 'Generation failed');
       }
@@ -752,8 +757,10 @@
       ap.src = data.download_url;
       ap.crossOrigin = 'anonymous';
       ap.onerror = () => { ap.removeAttribute('crossorigin'); ap.src = data.download_url; };
-      document.getElementById('trackInfo').textContent = `🎵 ${style} style • ${Math.round(duration/60)} min • ${currentMood}`;
-      document.getElementById('player').style.display = 'block';
+      document.getElementById('trackInfo').textContent = `🎵 ${style} style • ${duration}s • ${currentMood}`;
+      document.getElementById('trackInfo').style.color = 'var(--cyan)';
+      document.getElementById('audioPlayer').style.display = 'block';
+      document.getElementById('downloadBtn').style.display = 'block';
     } catch(e) {
       alert('Error: ' + e.message);
     } finally {
