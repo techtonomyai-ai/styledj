@@ -113,46 +113,50 @@ DEMO_TRACKS = {
     "default":    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
 }
 
+def _demo_track(mood: str, style: str, all_tags: list, duration: int) -> dict:
+    url = DEMO_TRACKS.get(mood or "default", DEMO_TRACKS["default"])
+    return {"url": url, "style": style, "tags": all_tags, "duration": duration, "demo": True}
+
+
 async def generate_track(style: str, duration: int = 60, mood: str = "energetic") -> dict:
-    tags = DJ_STYLE_MAP.get(style, ["edm", "progressive-house"])
-    mood_tags = MOOD_MAP.get(mood, [])
-    all_tags = list(set(tags + mood_tags))[:5]
+    try:
+        tags = DJ_STYLE_MAP.get(style) or ["edm", "progressive-house"]
+        mood_tags = MOOD_MAP.get(mood) or []
+        all_tags = list(set(tags + mood_tags))[:5]
+    except Exception:
+        tags, mood_tags, all_tags = ["edm"], [], ["edm"]
 
-    # Demo mode — returns a real audio file so the full app flow can be tested
-    if not MUBERT_API_KEY or os.getenv("DEMO_MODE") == "true":
-        url = DEMO_TRACKS.get(mood, DEMO_TRACKS["default"])
-        return {
-            "url": url,
-            "style": style,
-            "tags": all_tags,
-            "duration": duration,
-            "demo": True
-        }
+    # Always use demo if no key or demo mode set
+    if not MUBERT_API_KEY or os.getenv("DEMO_MODE", "").lower() in ("true", "1", "yes"):
+        return _demo_track(mood, style, all_tags, duration)
 
-    pat = await get_mubert_token()
+    try:
+        pat = await get_mubert_token()
+        if not pat:
+            return _demo_track(mood, style, all_tags, duration)
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            "https://api.mubert.com/v2/RecordTrackTTM",
-            json={
-                "method": "RecordTrackTTM",
-                "params": {
-                    "pat": pat,
-                    "tags": all_tags,
-                    "duration": duration,
-                    "mode": "track",
-                    "bitmask": 1
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                "https://api.mubert.com/v2/RecordTrackTTM",
+                json={
+                    "method": "RecordTrackTTM",
+                    "params": {
+                        "pat": pat,
+                        "tags": all_tags,
+                        "duration": duration,
+                        "mode": "track",
+                        "bitmask": 1
+                    }
                 }
-            }
-        )
-        data = resp.json()
-        track_url = data.get("data", {}).get("tasks", [{}])[0].get("download_link", "")
-        return {
-            "url": track_url,
-            "style": style,
-            "tags": all_tags,
-            "duration": duration
-        }
+            )
+            data = resp.json()
+            tasks = (data.get("data") or {}).get("tasks") or []
+            track_url = tasks[0].get("download_link", "") if tasks else ""
+            if not track_url:
+                return _demo_track(mood, style, all_tags, duration)
+            return {"url": track_url, "style": style, "tags": all_tags, "duration": duration}
+    except Exception:
+        return _demo_track(mood, style, all_tags, duration)
 
 # Additional artists added in v2
 DJ_STYLE_MAP.update({
