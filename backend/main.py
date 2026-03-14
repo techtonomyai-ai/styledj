@@ -295,52 +295,6 @@ async def analyze_sound(file: UploadFile = File(...), user_id: str = Depends(ver
 
 
 @app.post("/match")
-async def sound_match_generate(
-    file: UploadFile = File(...),
-    duration: int = 60,
-    user_id: str = Depends(verify_token)
-):
-    """Upload audio → analyze style → generate a matching copyright-free track via Mubert."""
-    if not is_subscribed(user_id):
-        raise HTTPException(status_code=402, detail="Subscribe to use Sound Match.")
-
-    audio_bytes = await file.read()
-
-    try:
-        from backend.sound_match import analyze_audio
-    except ImportError:
-        from sound_match import analyze_audio
-
-    analysis = analyze_audio(audio_bytes, file.filename)
-    
-    # Generate matching track via Mubert
-    track = await generate_track(
-        style=analysis["genre_guess"],
-        duration=duration,
-        mood=analysis["mood"]
-    )
-
-    # Save to DB
-    track_id = str(uuid.uuid4())
-    with get_db() as conn:
-        conn.execute(
-            "INSERT INTO tracks (id, user_id, style, url, duration, mood) VALUES (?,?,?,?,?,?)",
-            (track_id, user_id, f"Sound Match: {analysis['genre_guess']}", track["url"], duration, analysis["mood"])
-        )
-
-    return {
-        "track_id": track_id,
-        "download_url": track["url"],
-        "analysis": analysis,
-        "matched_style": analysis["genre_guess"],
-        "bpm": analysis["bpm"],
-        "key": analysis["key"],
-        "mood": analysis["mood"],
-        "tags": analysis["tags"]
-    }
-
-
-@app.post("/match")
 async def match_sound(
     file: UploadFile = File(...),
     duration: int = Form(60),
