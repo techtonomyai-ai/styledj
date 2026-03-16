@@ -186,7 +186,11 @@ async def health():
 async def root():
     index = Path(__file__).parent.parent / "frontend" / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        })
     return {"message": "StyleDJ API is running", "version": "1.0.0"}
 
 @app.post("/register")
@@ -247,7 +251,10 @@ async def verify_email(token: str):
         raise HTTPException(status_code=400, detail="Invalid verification link.")
     conn.execute("UPDATE users SET email_verified=1, verify_token=NULL WHERE verify_token=?", (token,))
     conn.commit()
-    return FileResponse(str(Path(__file__).parent.parent / "frontend" / "index.html"))
+    return FileResponse(str(Path(__file__).parent.parent / "frontend" / "index.html"), headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache", "Expires": "0"
+    })
 
 
 @app.post("/login")
