@@ -138,7 +138,8 @@
   <div style="display:flex;gap:8px;margin-bottom:16px;">
     <button id="tab-style" onclick="switchTab('style')" style="flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--purple),var(--cyan));color:#fff;font-weight:700;cursor:pointer;font-size:0.95rem;">🎧 DJ Style</button>
     <button id="tab-match" onclick="switchTab('match')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">🎵 Sound Match</button>
-    <button id="tab-lyrics" onclick="switchTab('lyrics')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">✍️ Lyrics</button>
+    <!-- Lyrics tab hidden until vocals quality is ready -->
+    <!-- <button id="tab-lyrics" onclick="switchTab('lyrics')" style="flex:1;padding:12px;border-radius:10px;border:2px solid var(--border);background:var(--card);color:var(--muted);font-weight:700;cursor:pointer;font-size:0.95rem;">✍️ Lyrics</button> -->
   </div>
 
   <!-- SOUND MATCH TAB -->
@@ -498,8 +499,8 @@
     </div>
   </div>
 
-  <!-- LYRICS TAB -->
-  <div id="panel-lyrics" class="card" style="display:none;">
+  <!-- LYRICS TAB — hidden until vocals quality is ready -->
+  <div id="panel-lyrics" class="card" style="display:none !important;">
     <h2 style="text-align:center;margin-bottom:20px;">✍️ AI Lyrics Generator</h2>
 
     <div class="form-group">
