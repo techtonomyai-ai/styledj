@@ -548,7 +548,7 @@
         <input type="range" id="vocDurSlider" min="60" max="600" value="120" step="30" oninput="updateVocalDur()" style="width:100%;"/>
       </div>
 
-      <button onclick="generateWithVocals()" id="vocalsTrackBtn" class="generate-btn" style="margin-top:16px;">
+      <button onclick="generateWithVocals()" id="vocalsTrackBtn" style="width:100%;margin-top:16px;padding:18px;background:linear-gradient(135deg,#7B2FBE,#00D4FF);border:none;border-radius:12px;color:#fff;font-size:1.1rem;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(123,47,190,0.4);">
         🎤 Generate Track with Vocals
       </button>
       <div id="vocalsTrackLoading" style="display:none;text-align:center;padding:20px;color:var(--cyan);">
@@ -572,9 +572,9 @@
       </div>
     </div>
 
-      <button onclick="switchTab('style')" style="width:100%;margin-top:12px;padding:14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-weight:600;cursor:pointer;font-size:0.9rem;">
-        🎧 Generate Instrumental Only
-      </button>
+      <div style="text-align:center;margin-top:10px;">
+        <a href="#" onclick="switchTab('style')" style="color:var(--muted);font-size:0.82rem;text-decoration:none;">Skip vocals — just generate instrumental →</a>
+      </div>
     </div>
   </div>
 
