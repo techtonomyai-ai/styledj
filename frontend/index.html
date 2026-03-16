@@ -552,7 +552,7 @@
           <span style="color:var(--cyan);font-weight:700;font-size:0.9rem;" id="lyricsTitle">Lyrics</span>
           <button onclick="copyLyrics()" style="padding:6px 14px;background:rgba(0,212,255,0.1);border:1px solid var(--cyan);border-radius:6px;color:var(--cyan);font-size:0.8rem;cursor:pointer;">📋 Copy</button>
         </div>
-        <pre id="lyricsText" style="white-space:pre-wrap;color:#E0E0FF;font-family:inherit;font-size:0.9rem;line-height:1.7;margin:0;"></pre>
+        <textarea id="lyricsText" rows="14" style="width:100%;background:transparent;border:none;resize:vertical;color:#E0E0FF;font-family:inherit;font-size:0.9rem;line-height:1.7;margin:0;outline:none;white-space:pre-wrap;" placeholder="Your lyrics will appear here — you can edit them before generating the track..."></textarea>
       </div>
       <!-- Voice selector -->
       <div style="margin-top:16px;">
@@ -781,7 +781,7 @@
 
   async function generateWithVocals() {
     if (!token) { showAuthModal('register'); return; }
-    const lyrics = document.getElementById('lyricsText').textContent;
+    const lyrics = document.getElementById('lyricsText').value;
     if (!lyrics || lyrics.length < 10) { showToast('⚠️ Generate lyrics first, then add vocals'); return; }
     const style = document.getElementById('lyricsStyle').value;
     const duration = parseInt(document.getElementById('vocDurSlider').value) || 60;
@@ -959,7 +959,7 @@
         throw new Error(data.detail || 'Lyrics generation failed');
       }
       document.getElementById('lyricsTitle').textContent = `✍️ ${style} · ${lyricsMood}`;
-      document.getElementById('lyricsText').textContent = data.lyrics;
+      document.getElementById('lyricsText').value = data.lyrics;
       document.getElementById('lyricsOutput').style.display = 'block';
       document.getElementById('lyricsOutput').scrollIntoView({behavior:'smooth', block:'start'});
     } catch(e) {
@@ -971,7 +971,7 @@
   }
 
   function copyLyrics() {
-    const text = document.getElementById('lyricsText').textContent;
+    const text = document.getElementById('lyricsText').value;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => showToast('✅ Lyrics copied!', 2000)).catch(() => fallbackCopy(text));
     } else { fallbackCopy(text); }
