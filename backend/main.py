@@ -342,33 +342,86 @@ async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify
             with open(music_path, "wb") as f:
                 f.write(r.content)
 
-        # Step 3: Generate vocals via OpenAI TTS
-        clean_lyrics = req.lyrics.replace('[Verse 1]','').replace('[Pre-Chorus]','') \
-            .replace('[Chorus]','').replace('[Verse 2]','').replace('[Bridge]','') \
-            .replace('[Outro]','').replace('[Hook]','').strip()
-        # Keep it under 4096 chars (OpenAI TTS limit)
-        clean_lyrics = clean_lyrics[:4000]
+        # Step 3: Clean lyrics
+        clean_lyrics = req.lyrics
+        for tag in ['[Verse 1]','[Verse 2]','[Pre-Chorus]','[Chorus]','[Bridge]','[Outro]','[Hook]','[Intro]']:
+            clean_lyrics = clean_lyrics.replace(tag, '\n')
+        clean_lyrics = clean_lyrics.strip()[:4000]
 
-        async with _httpx.AsyncClient(timeout=60) as client:
-            tts_resp = await client.post(
-                "https://api.openai.com/v1/audio/speech",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                json={"model": "tts-1", "input": clean_lyrics, "voice": req.voice, "speed": 0.95}
-            )
-            if tts_resp.status_code != 200:
-                raise HTTPException(status_code=500, detail=f"TTS failed: {tts_resp.text[:200]}")
-            with open(vocals_path, "wb") as f:
-                f.write(tts_resp.content)
+        # Step 3a: Try ElevenLabs first (much more human/expressive), fallback to OpenAI TTS
+        eleven_key = os.getenv("ELEVENLABS_API_KEY", "")
+        raw_vocals_path = os.path.join(tmpdir, "vocals_raw.mp3")
 
-        # Step 4: Mix with ffmpeg — loop music, vocals on top
+        if eleven_key:
+            # ElevenLabs — expressive, human-sounding, near-singing quality
+            # Map voice name to ElevenLabs voice ID
+            ELEVEN_VOICES = {
+                "nova":    "EXAVITQu4vr4xnSDxMaL",  # Bella — warm female
+                "shimmer": "MF3mGyEYCl7XYWbV9V6O",  # Elli — young bright female
+                "alloy":   "pqHfZKP75CvOlQylNhV4",  # Bill — neutral
+                "echo":    "TxGEqnHWrfWFTfGW9XjX",  # Josh — clear male
+                "onyx":    "pNInz6obpgDQGcFmaJgB",  # Adam — deep male
+                "fable":   "yoZ06aMxZJJ28mfd3POQ",  # Sam — expressive
+            }
+            voice_id = ELEVEN_VOICES.get(req.voice, "EXAVITQu4vr4xnSDxMaL")
+            async with _httpx.AsyncClient(timeout=90) as client:
+                el_resp = await client.post(
+                    f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                    headers={"xi-api-key": eleven_key, "Content-Type": "application/json"},
+                    json={
+                        "text": clean_lyrics,
+                        "model_id": "eleven_multilingual_v2",
+                        "voice_settings": {
+                            "stability": 0.25,        # low = more expressive/emotional
+                            "similarity_boost": 0.80,
+                            "style": 0.85,            # high = more stylized/singer-like
+                            "use_speaker_boost": True
+                        }
+                    }
+                )
+                if el_resp.status_code == 200:
+                    with open(raw_vocals_path, "wb") as f:
+                        f.write(el_resp.content)
+                else:
+                    eleven_key = ""  # fallback to OpenAI
+
+        if not eleven_key:
+            # OpenAI TTS fallback
+            async with _httpx.AsyncClient(timeout=60) as client:
+                tts_resp = await client.post(
+                    "https://api.openai.com/v1/audio/speech",
+                    headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                    json={"model": "tts-1-hd", "input": clean_lyrics, "voice": req.voice, "speed": 0.92}
+                )
+                if tts_resp.status_code != 200:
+                    raise HTTPException(status_code=500, detail=f"TTS failed: {tts_resp.text[:200]}")
+                with open(raw_vocals_path, "wb") as f:
+                    f.write(tts_resp.content)
+
+        # Step 3b: Process vocals with ffmpeg — add reverb, chorus, EQ for more human/musical feel
+        vocals_fx_path = os.path.join(tmpdir, "vocals_fx.mp3")
+        fx_filter = (
+            "acompressor=threshold=0.04:ratio=4:attack=5:release=80:makeup=2,"  # compression — even dynamics
+            "equalizer=f=150:width_type=h:width=80:g=-4,"                        # cut muddy bass
+            "equalizer=f=3500:width_type=h:width=600:g=4,"                       # boost presence/clarity
+            "equalizer=f=8000:width_type=h:width=1000:g=2,"                      # air/brightness
+            "chorus=0.6:0.9:50|60|80:0.4|0.35|0.3:0.25|0.2|0.22:2|1.5|1.8,"   # lush chorus harmonies
+            "aecho=0.75:0.65:80|120:0.35|0.2,"                                  # short reverb tails
+            "acompressor=threshold=0.08:ratio=2:attack=2:release=30"             # final polish
+        )
+        fx_cmd = ["ffmpeg", "-y", "-i", raw_vocals_path, "-af", fx_filter,
+                  "-codec:a", "libmp3lame", "-b:a", "192k", vocals_fx_path]
+        fx_result = subprocess.run(fx_cmd, capture_output=True, timeout=60)
+        vocals_path = vocals_fx_path if fx_result.returncode == 0 else raw_vocals_path
+
+        # Step 4: Mix with ffmpeg — loop music, processed vocals on top
         music_vol = req.music_volume
-        vocals_vol = 1.0
         ffmpeg_cmd = [
             "ffmpeg", "-y",
-            "-stream_loop", "-1", "-i", music_path,   # loop music
-            "-i", vocals_path,                          # vocals
+            "-stream_loop", "-1", "-i", music_path,
+            "-i", vocals_path,
             "-filter_complex",
-            f"[0:a]volume={music_vol}[bg];[1:a]volume={vocals_vol}[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=2[out]",
+            f"[0:a]volume={music_vol}[bg];[1:a]volume=1.0[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=3[out]",
             "-map", "[out]",
             "-codec:a", "libmp3lame", "-b:a", "192k",
             "-t", str(req.duration),
