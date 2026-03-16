@@ -384,12 +384,22 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
             _vocals_jobs[job_id]["step"] = "Generating vocals..."
             if eleven_key:
                 voice_id = ELEVEN_VOICES.get(req.voice, "EXAVITQu4vr4xnSDxMaL")
+                # Format lyrics for more singing-like delivery
+                singing_lyrics = clean_lyrics.replace('. ', '... ').replace('! ', '!... ').replace(', ', ', ')
                 async with _httpx.AsyncClient(timeout=90) as client:
                     el_resp = await client.post(
                         f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
                         headers={"xi-api-key": eleven_key, "Content-Type": "application/json"},
-                        json={"text": clean_lyrics, "model_id": "eleven_multilingual_v2",
-                              "voice_settings": {"stability": 0.25, "similarity_boost": 0.80, "style": 0.85, "use_speaker_boost": True}}
+                        json={
+                            "text": singing_lyrics,
+                            "model_id": "eleven_multilingual_v2",
+                            "voice_settings": {
+                                "stability": 0.10,        # very low = max expressiveness/emotional range
+                                "similarity_boost": 0.75,
+                                "style": 1.0,             # max style = most singer-like
+                                "use_speaker_boost": True
+                            }
+                        }
                     )
                     if el_resp.status_code == 200:
                         with open(raw_vocals_path, "wb") as f:
@@ -402,7 +412,7 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
                     tts_resp = await client.post(
                         "https://api.openai.com/v1/audio/speech",
                         headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                        json={"model": "tts-1-hd", "input": clean_lyrics, "voice": req.voice, "speed": 0.92}
+                        json={"model": "tts-1-hd", "input": clean_lyrics, "voice": req.voice, "speed": 0.88}
                     )
                     if tts_resp.status_code != 200:
                         _vocals_jobs[job_id] = {"status": "failed", "error": "TTS failed"}
@@ -410,30 +420,91 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
                     with open(raw_vocals_path, "wb") as f:
                         f.write(tts_resp.content)
 
-            _vocals_jobs[job_id]["step"] = "Mixing track..."
-            vocals_fx_path = os.path.join(tmpdir, "vocals_fx.mp3")
-            fx_filter = (
-                "acompressor=threshold=0.04:ratio=4:attack=5:release=80:makeup=2,"
-                "equalizer=f=150:width_type=h:width=80:g=-4,"
-                "equalizer=f=3500:width_type=h:width=600:g=4,"
-                "equalizer=f=8000:width_type=h:width=1000:g=2,"
-                "chorus=0.6:0.9:50|60|80:0.4|0.35|0.3:0.25|0.2|0.22:2|1.5|1.8,"
-                "aecho=0.75:0.65:80|120:0.35|0.2,"
-                "acompressor=threshold=0.08:ratio=2:attack=2:release=30"
-            )
-            fx_cmd = ["ffmpeg", "-y", "-i", raw_vocals_path, "-af", fx_filter,
-                      "-codec:a", "libmp3lame", "-b:a", "192k", vocals_fx_path]
-            fx_result = subprocess.run(fx_cmd, capture_output=True, timeout=60)
-            vocals_path = vocals_fx_path if fx_result.returncode == 0 else raw_vocals_path
+            _vocals_jobs[job_id]["step"] = "Building harmonies..."
 
+            # Step A: Process lead vocal — EQ + compression + light reverb
+            lead_path = os.path.join(tmpdir, "vocals_lead.mp3")
+            lead_filter = (
+                "acompressor=threshold=0.05:ratio=3:attack=5:release=60:makeup=2,"
+                "equalizer=f=200:width_type=h:width=100:g=-3,"
+                "equalizer=f=3000:width_type=h:width=500:g=3,"
+                "equalizer=f=8000:width_type=h:width=800:g=2,"
+                "aecho=0.6:0.5:40:0.15"                           # short room reverb
+            )
+            subprocess.run(["ffmpeg", "-y", "-i", raw_vocals_path, "-af", lead_filter,
+                            "-codec:a", "libmp3lame", "-b:a", "192k", lead_path],
+                           capture_output=True, timeout=60)
+
+            # Step B: Harmony 1 — pitch up a major third (+4 semitones, ratio 1.2599)
+            harm1_path = os.path.join(tmpdir, "harm1.mp3")
+            subprocess.run(["ffmpeg", "-y", "-i", raw_vocals_path,
+                            "-af", "asetrate=44100*1.2599,aresample=44100,"
+                                   "acompressor=threshold=0.05:ratio=3:attack=5:release=60,"
+                                   "equalizer=f=3000:width_type=h:width=500:g=2,"
+                                   "aecho=0.7:0.6:55:0.2",
+                            "-codec:a", "libmp3lame", "-b:a", "192k", harm1_path],
+                           capture_output=True, timeout=60)
+
+            # Step C: Harmony 2 — pitch up a perfect fifth (+7 semitones, ratio 1.4983)
+            harm2_path = os.path.join(tmpdir, "harm2.mp3")
+            subprocess.run(["ffmpeg", "-y", "-i", raw_vocals_path,
+                            "-af", "asetrate=44100*1.4983,aresample=44100,"
+                                   "acompressor=threshold=0.05:ratio=3:attack=5:release=60,"
+                                   "equalizer=f=3000:width_type=h:width=500:g=1,"
+                                   "aecho=0.7:0.6:70:0.2",
+                            "-codec:a", "libmp3lame", "-b:a", "192k", harm2_path],
+                           capture_output=True, timeout=60)
+
+            # Step D: Sub harmony — pitch down an octave (-12 semitones, ratio 0.5) for depth
+            harm3_path = os.path.join(tmpdir, "harm3.mp3")
+            subprocess.run(["ffmpeg", "-y", "-i", raw_vocals_path,
+                            "-af", "asetrate=44100*0.5,aresample=44100,"
+                                   "acompressor=threshold=0.05:ratio=4:attack=5:release=60,"
+                                   "equalizer=f=200:width_type=h:width=100:g=2,"
+                                   "aecho=0.6:0.5:50:0.1",
+                            "-codec:a", "libmp3lame", "-b:a", "192k", harm3_path],
+                           capture_output=True, timeout=60)
+
+            # Use lead if harmony files failed
+            h1 = harm1_path if os.path.exists(harm1_path) and os.path.getsize(harm1_path) > 1000 else lead_path
+            h2 = harm2_path if os.path.exists(harm2_path) and os.path.getsize(harm2_path) > 1000 else lead_path
+            h3 = harm3_path if os.path.exists(harm3_path) and os.path.getsize(harm3_path) > 1000 else lead_path
+            lead = lead_path if os.path.exists(lead_path) and os.path.getsize(lead_path) > 1000 else raw_vocals_path
+
+            _vocals_jobs[job_id]["step"] = "Mixing track..."
+
+            # Step E: Mix music + lead + harmonies
+            # Lead: 100%, Harmony 1 (3rd): 45%, Harmony 2 (5th): 35%, Sub: 20%
             ffmpeg_cmd = [
-                "ffmpeg", "-y", "-stream_loop", "-1", "-i", music_path, "-i", vocals_path,
+                "ffmpeg", "-y",
+                "-stream_loop", "-1", "-i", music_path,  # [0] music loop
+                "-i", lead,                               # [1] lead vocal
+                "-i", h1,                                 # [2] harmony 3rd
+                "-i", h2,                                 # [3] harmony 5th
+                "-i", h3,                                 # [4] sub harmony
                 "-filter_complex",
-                f"[0:a]volume={req.music_volume}[bg];[1:a]volume=1.0[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=3[out]",
-                "-map", "[out]", "-codec:a", "libmp3lame", "-b:a", "192k",
+                f"[0:a]volume={req.music_volume}[bg];"
+                "[1:a]volume=1.0[lead];"
+                "[2:a]volume=0.45[h1];"
+                "[3:a]volume=0.35[h2];"
+                "[4:a]volume=0.20[h3];"
+                "[lead][h1][h2][h3]amix=inputs=4:duration=longest:dropout_transition=2[vocals];"
+                "[bg][vocals]amix=inputs=2:duration=first:dropout_transition=3[out]",
+                "-map", "[out]",
+                "-codec:a", "libmp3lame", "-b:a", "192k",
                 "-t", str(req.duration), output_path
             ]
             mix_result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+            if mix_result.returncode != 0:
+                # Fallback: simple mix without harmonies
+                fallback_cmd = [
+                    "ffmpeg", "-y", "-stream_loop", "-1", "-i", music_path, "-i", raw_vocals_path,
+                    "-filter_complex",
+                    f"[0:a]volume={req.music_volume}[bg];[1:a]volume=1.0[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=3[out]",
+                    "-map", "[out]", "-codec:a", "libmp3lame", "-b:a", "192k",
+                    "-t", str(req.duration), output_path
+                ]
+                mix_result = subprocess.run(fallback_cmd, capture_output=True, timeout=120)
             if mix_result.returncode != 0:
                 _vocals_jobs[job_id] = {"status": "failed", "error": "Mix failed"}
                 return
