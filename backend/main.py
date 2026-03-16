@@ -75,21 +75,29 @@ def init_db():
 init_db()
 
 def ensure_admin_subscribed():
-    """Keep admin/test accounts subscribed across redeploys."""
+    """Keep admin accounts subscribed across redeploys — INSERT if not exists, UPDATE if exists."""
     conn = get_db()
-    conn.execute(
-        "UPDATE users SET subscribed=1 WHERE email IN ({})".format(
-            ",".join("?" * len(ADMIN_EMAILS))
-        ), ADMIN_EMAILS
-    )
+    for email in ADMIN_EMAILS:
+        existing = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+        if existing:
+            conn.execute("UPDATE users SET subscribed=1 WHERE email=?", (email,))
+        else:
+            import uuid as _uuid
+            new_id = str(_uuid.uuid4())
+            # Default password hash for "techtonomy2026" — admin can reset via forgot password
+            pw_hash = hash_password("techtonomy2026")
+            conn.execute(
+                "INSERT INTO users (id, email, password_hash, subscribed, trial_start) VALUES (?,?,?,1,?)",
+                (new_id, email, pw_hash, datetime.utcnow().isoformat())
+            )
     conn.commit()
     conn.close()
-
-ensure_admin_subscribed()
 
 # --- Auth ---
 def hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
+
+ensure_admin_subscribed()
 
 def create_token(user_id: str) -> str:
     payload = {"sub": user_id, "exp": datetime.utcnow() + timedelta(days=30)}
