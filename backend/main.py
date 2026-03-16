@@ -256,15 +256,12 @@ async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_toke
     if not is_subscribed(user_id):
         raise HTTPException(status_code=402, detail="Subscription required.")
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        import httpx as _httpx
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        if not openai_key:
+            raise HTTPException(status_code=500, detail="OpenAI API key not configured.")
         theme_line = f"Theme/vibe: {req.theme}" if req.theme else "Theme: freedom, energy, the night"
-        msg = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=600,
-            messages=[{
-                "role": "user",
-                "content": f"""Write song lyrics for an EDM track in the style of {req.style}.
+        prompt = f"""Write song lyrics for an EDM track in the style of {req.style}.
 {theme_line}
 Mood: {req.mood}
 
@@ -288,10 +285,17 @@ Format:
 (2-4 lines)
 
 Make them punchy, emotional, festival-ready. Use simple words that sound great when sung."""
-            }]
-        )
-        lyrics = msg.content[0].text
+        async with _httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}"},
+                json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 600}
+            )
+        result = resp.json()
+        lyrics = result["choices"][0]["message"]["content"]
         return {"lyrics": lyrics, "style": req.style, "theme": req.theme}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lyrics generation failed: {str(e)}")
 
