@@ -78,9 +78,9 @@ def ensure_admin_subscribed():
     """Keep admin accounts subscribed across redeploys — INSERT if not exists, UPDATE if exists."""
     conn = get_db()
     for email in ADMIN_EMAILS:
-        existing = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+        existing = conn.execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone()
         if existing:
-            conn.execute("UPDATE users SET subscribed=1 WHERE email=?", (email,))
+            conn.execute("UPDATE users SET subscribed=1 WHERE LOWER(email)=LOWER(?)", (email,))
         else:
             import uuid as _uuid
             new_id = str(_uuid.uuid4())
@@ -182,12 +182,12 @@ async def forgot_password(req: LoginRequest):
     except ImportError:
         from email_service import send_password_reset_email
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE email=?", (req.email,)).fetchone()
+    user = conn.execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", (req.email,)).fetchone()
     if not user:
         return {"message": "If that email exists, a reset link has been sent."}
     reset_token = str(uuid.uuid4())
     expires = (datetime.utcnow() + timedelta(hours=1)).isoformat()
-    conn.execute("UPDATE users SET reset_token=?, reset_token_expires=? WHERE email=?",
+    conn.execute("UPDATE users SET reset_token=?, reset_token_expires=? WHERE LOWER(email)=LOWER(?)",
                  (reset_token, expires, req.email))
     conn.commit()
     send_password_reset_email(req.email, reset_token)
@@ -223,7 +223,7 @@ async def verify_email(token: str):
 async def login(req: LoginRequest):
     conn = get_db()
     user = conn.execute(
-        "SELECT * FROM users WHERE email=? AND password_hash=?",
+        "SELECT * FROM users WHERE LOWER(email)=LOWER(?) AND password_hash=?",
         (req.email, hash_password(req.password))
     ).fetchone()
     conn.close()
@@ -583,7 +583,7 @@ async def admin_subscribe(email: str, secret: str):
     if secret != os.getenv("ADMIN_SECRET", ""):
         raise HTTPException(status_code=403, detail="Forbidden")
     conn = get_db()
-    conn.execute("UPDATE users SET subscribed=1 WHERE email=?", (email,))
+    conn.execute("UPDATE users SET subscribed=1 WHERE LOWER(email)=LOWER(?)", (email,))
     conn.commit()
     conn.close()
     return {"message": f"✅ {email} set to subscribed"}
