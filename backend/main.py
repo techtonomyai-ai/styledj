@@ -347,13 +347,111 @@ Make them punchy, emotional, festival-ready. Use simple words that sound great w
         raise HTTPException(status_code=500, detail=f"Lyrics generation failed: {str(e)}")
 
 
+async def _generate_mureka_song(lyrics: str, style: str, mood: str, duration: int, mureka_key: str) -> str:
+    """Generate a full song with real singing via Mureka AI. Returns audio URL."""
+    import httpx as _httpx
+    # Map DJ style + mood to a Mureka prompt
+    style_prompt = f"{style} style electronic music, {mood} mood, EDM, professional production, clear singing vocals, melodic chorus with harmonies"
+
+    async with _httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.mureka.ai/v1/song/generate",
+            headers={"Authorization": f"Bearer {mureka_key}", "Content-Type": "application/json"},
+            json={
+                "lyrics": lyrics[:3000],
+                "model": "auto",
+                "prompt": style_prompt,
+                "n": 1
+            }
+        )
+        if resp.status_code != 200:
+            raise Exception(f"Mureka start failed: {resp.text[:200]}")
+        task = resp.json()
+        task_id = task.get("id")
+        if not task_id:
+            raise Exception("No task ID from Mureka")
+
+    # Poll for completion (up to 3 min)
+    async with _httpx.AsyncClient(timeout=15) as client:
+        for _ in range(36):
+            await asyncio.sleep(5)
+            poll = await client.get(
+                f"https://api.mureka.ai/v1/song/query/{task_id}",
+                headers={"Authorization": f"Bearer {mureka_key}"}
+            )
+            if poll.status_code != 200:
+                continue
+            data = poll.json()
+            status = data.get("status", "")
+            if status == "succeeded":
+                choices = data.get("choices", [])
+                if choices:
+                    url = choices[0].get("audio", "") or choices[0].get("url", "")
+                    if url:
+                        return url
+                raise Exception("Mureka succeeded but no audio URL")
+            if status in ("failed", "error"):
+                raise Exception(f"Mureka generation failed: {data.get('error','unknown')}")
+    raise Exception("Mureka timed out")
+
+
 async def _run_vocals_job(job_id: str, req, user_id: str):
     """Background task: generate vocals track and store result in _vocals_jobs."""
     import tempfile, subprocess, httpx as _httpx
     try:
         _vocals_jobs[job_id] = {"status": "processing", "step": "Starting..."}
 
+        mureka_key = os.getenv("MUREKA_API_KEY", "")
         openai_key = os.getenv("OPENAI_API_KEY", "")
+
+        # --- PATH A: Mureka AI (real singing) ---
+        if mureka_key:
+            _vocals_jobs[job_id]["step"] = "🎤 Generating AI singing vocals..."
+            try:
+                clean_lyrics = req.lyrics
+                for tag in ['[Verse 1]','[Verse 2]','[Pre-Chorus]','[Chorus]','[Bridge]','[Outro]','[Hook]','[Intro]']:
+                    clean_lyrics = clean_lyrics.replace(tag, '\n')
+                clean_lyrics = clean_lyrics.strip()
+
+                audio_url = await _generate_mureka_song(clean_lyrics, req.style, req.mood, req.duration, mureka_key)
+                os.makedirs("/tmp/vocals", exist_ok=True)
+                track_id = str(uuid.uuid4())
+                dest = f"/tmp/vocals/{track_id}.mp3"
+
+                _vocals_jobs[job_id]["step"] = "Downloading your track..."
+                async with _httpx.AsyncClient(timeout=60) as client:
+                    r = await client.get(audio_url)
+                    with open(dest, "wb") as f:
+                        f.write(r.content)
+
+                try:
+                    conn = get_db()
+                    conn.execute(
+                        "INSERT INTO tracks (id, user_id, style, duration, mood, file_url, tags) VALUES (?,?,?,?,?,?,?)",
+                        (track_id, user_id, f"Vocals: {req.style}", req.duration, req.mood, audio_url, "mureka")
+                    )
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
+                _vocals_jobs[job_id] = {
+                    "status": "done",
+                    "track_id": track_id,
+                    "stream_url": f"/stream/{track_id}",
+                    "style": req.style,
+                    "voice": "mureka",
+                    "duration": req.duration,
+                    "can_remix": False,
+                    "provider": "mureka"
+                }
+                return
+            except Exception as e:
+                # Fall through to ElevenLabs if Mureka fails
+                _vocals_jobs[job_id]["step"] = f"Mureka unavailable, switching to ElevenLabs..."
+                await asyncio.sleep(1)
+
+        # --- PATH B: ElevenLabs + Mubert (fallback) ---
         try:
             from backend.mubert_client import generate_track as gen
         except ImportError:
