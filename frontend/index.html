@@ -763,41 +763,57 @@
     }, 10000);
 
     try {
-      const controller = new AbortController();
-      const fetchTimer = setTimeout(() => controller.abort(), 100000); // 100s timeout
-      let res, data;
-      try {
-        res = await fetch(`${API}/vocals`, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
-          body: JSON.stringify({ lyrics, style, mood: lyricsMood, voice: selectedVoice, duration, music_volume: musicVol }),
-          signal: controller.signal
-        });
-        clearTimeout(fetchTimer);
-        data = await res.json();
-      } catch(fetchErr) {
-        clearTimeout(fetchTimer);
-        if (fetchErr.name === 'AbortError') throw new Error('Request timed out — server took too long. Try a shorter duration.');
-        throw new Error('Network error — check your connection and try again.');
+      // Step 1: Start the job (returns immediately with job_id)
+      const startRes = await fetch(`${API}/vocals`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
+        body: JSON.stringify({ lyrics, style, mood: lyricsMood, voice: selectedVoice, duration, music_volume: musicVol })
+      });
+      if (!startRes.ok) {
+        const err = await startRes.json().catch(() => ({}));
+        if (startRes.status === 402) { showToast('⚠️ Subscription issue — sign out and back in', 4000); return; }
+        throw new Error(err.detail || `Server error ${startRes.status}`);
       }
-      if (!res.ok) {
-        if (res.status === 402) {
-          showToast('⚠️ Subscription issue — try signing out and back in', 4000);
+      const { job_id } = await startRes.json();
+
+      // Step 2: Poll every 5s for completion
+      let attempts = 0;
+      const maxAttempts = 36; // 3 minutes max
+      const stepMsgs = ['Generating AI vocals...','Generating music...','Mixing track...','Almost done...'];
+      while (attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 5000));
+        attempts++;
+        const p = document.getElementById('vocalsProgress');
+        const t = document.getElementById('vocalsLoadingText');
+        const st = document.getElementById('vocalsStep');
+        const pct = Math.min(10 + attempts * 3, 90);
+        if (p) p.style.width = pct + '%';
+        const pollRes = await fetch(`${API}/vocals/status/${job_id}`, {
+          headers: {'Authorization': `Bearer ${token}`}
+        });
+        if (!pollRes.ok) continue;
+        const job = await pollRes.json();
+        if (t) t.textContent = job.step || stepMsgs[Math.min(Math.floor(attempts/4), 3)];
+        if (st) st.textContent = Math.min(Math.ceil(attempts/4), 3);
+        if (job.status === 'done') {
+          if (p) p.style.width = '100%';
+          const streamUrl = `${API}${job.stream_url}`;
+          vocalsTrackB64 = job.stream_url;
+          const vap = document.getElementById('vocalsAudioPlayer');
+          document.getElementById('vocalsAudioSource').src = streamUrl;
+          vap.load();
+          document.getElementById('vocalsTrackInfo').textContent = `${style} · ${selectedVoice} · ${duration}s`;
+          document.getElementById('vocalsTrackPlayer').style.display = 'block';
+          document.getElementById('vocalsTrackPlayer').scrollIntoView({behavior:'smooth', block:'center'});
           return;
         }
-        throw new Error(data.detail || `Server error ${res.status}`);
+        if (job.status === 'failed') {
+          throw new Error(job.error || 'Generation failed — try again');
+        }
       }
-      // Play via stream URL (avoids iOS base64 data URI size limit)
-      const streamUrl = `${API}${data.stream_url}`;
-      vocalsTrackB64 = data.stream_url;
-      const vap = document.getElementById('vocalsAudioPlayer');
-      document.getElementById('vocalsAudioSource').src = streamUrl;
-      vap.load(); // force reload source for Android/iOS
-      document.getElementById('vocalsTrackInfo').textContent = `${style} · ${selectedVoice} · ${duration}s`;
-      document.getElementById('vocalsTrackPlayer').style.display = 'block';
-      document.getElementById('vocalsTrackPlayer').scrollIntoView({behavior:'smooth', block:'center'});
+      throw new Error('Timed out waiting for track — try again');
     } catch(e) {
-      showToast('⚠️ ' + (e.message || 'Vocals generation failed — try again'));
+      showToast('⚠️ ' + (e.message || 'Vocals generation failed — try again'), 5000);
     } finally {
       clearInterval(prog);
       btn.disabled = false;

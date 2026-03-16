@@ -1,4 +1,4 @@
-import os, uuid, hashlib, sqlite3
+import os, uuid, hashlib, sqlite3, asyncio, threading
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -11,6 +11,9 @@ from pydantic import BaseModel
 import stripe
 import jwt as pyjwt
 from dotenv import load_dotenv
+
+# In-memory job store for async vocals generation
+_vocals_jobs: dict = {}  # job_id -> {status, stream_url, error}
 try:
     from backend.mubert_client import generate_track
 except ImportError:
@@ -336,156 +339,153 @@ Make them punchy, emotional, festival-ready. Use simple words that sound great w
         raise HTTPException(status_code=500, detail=f"Lyrics generation failed: {str(e)}")
 
 
+async def _run_vocals_job(job_id: str, req, user_id: str):
+    """Background task: generate vocals track and store result in _vocals_jobs."""
+    import tempfile, subprocess, httpx as _httpx
+    try:
+        _vocals_jobs[job_id] = {"status": "processing", "step": "Starting..."}
+
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        try:
+            from backend.mubert_client import generate_track as gen
+        except ImportError:
+            from mubert_client import generate_track as gen
+
+        _vocals_jobs[job_id]["step"] = "Generating music..."
+        music_result = await gen(req.style, req.duration, req.mood)
+        music_url = music_result.get("url", "")
+        if not music_url:
+            _vocals_jobs[job_id] = {"status": "failed", "error": "Music generation failed"}
+            return
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            music_path = os.path.join(tmpdir, "music.mp3")
+            output_path = os.path.join(tmpdir, "mixed.mp3")
+
+            _vocals_jobs[job_id]["step"] = "Downloading music..."
+            async with _httpx.AsyncClient(timeout=60) as client:
+                r = await client.get(music_url)
+                with open(music_path, "wb") as f:
+                    f.write(r.content)
+
+            clean_lyrics = req.lyrics
+            for tag in ['[Verse 1]','[Verse 2]','[Pre-Chorus]','[Chorus]','[Bridge]','[Outro]','[Hook]','[Intro]']:
+                clean_lyrics = clean_lyrics.replace(tag, '\n')
+            clean_lyrics = clean_lyrics.strip()[:4000]
+
+            eleven_key = os.getenv("ELEVENLABS_API_KEY", "")
+            raw_vocals_path = os.path.join(tmpdir, "vocals_raw.mp3")
+            ELEVEN_VOICES = {
+                "nova": "EXAVITQu4vr4xnSDxMaL", "shimmer": "MF3mGyEYCl7XYWbV9V6O",
+                "alloy": "pqHfZKP75CvOlQylNhV4", "echo": "TxGEqnHWrfWFTfGW9XjX",
+                "onyx": "pNInz6obpgDQGcFmaJgB", "fable": "yoZ06aMxZJJ28mfd3POQ",
+            }
+
+            _vocals_jobs[job_id]["step"] = "Generating vocals..."
+            if eleven_key:
+                voice_id = ELEVEN_VOICES.get(req.voice, "EXAVITQu4vr4xnSDxMaL")
+                async with _httpx.AsyncClient(timeout=90) as client:
+                    el_resp = await client.post(
+                        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                        headers={"xi-api-key": eleven_key, "Content-Type": "application/json"},
+                        json={"text": clean_lyrics, "model_id": "eleven_multilingual_v2",
+                              "voice_settings": {"stability": 0.25, "similarity_boost": 0.80, "style": 0.85, "use_speaker_boost": True}}
+                    )
+                    if el_resp.status_code == 200:
+                        with open(raw_vocals_path, "wb") as f:
+                            f.write(el_resp.content)
+                    else:
+                        eleven_key = ""
+
+            if not eleven_key:
+                async with _httpx.AsyncClient(timeout=60) as client:
+                    tts_resp = await client.post(
+                        "https://api.openai.com/v1/audio/speech",
+                        headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                        json={"model": "tts-1-hd", "input": clean_lyrics, "voice": req.voice, "speed": 0.92}
+                    )
+                    if tts_resp.status_code != 200:
+                        _vocals_jobs[job_id] = {"status": "failed", "error": "TTS failed"}
+                        return
+                    with open(raw_vocals_path, "wb") as f:
+                        f.write(tts_resp.content)
+
+            _vocals_jobs[job_id]["step"] = "Mixing track..."
+            vocals_fx_path = os.path.join(tmpdir, "vocals_fx.mp3")
+            fx_filter = (
+                "acompressor=threshold=0.04:ratio=4:attack=5:release=80:makeup=2,"
+                "equalizer=f=150:width_type=h:width=80:g=-4,"
+                "equalizer=f=3500:width_type=h:width=600:g=4,"
+                "equalizer=f=8000:width_type=h:width=1000:g=2,"
+                "chorus=0.6:0.9:50|60|80:0.4|0.35|0.3:0.25|0.2|0.22:2|1.5|1.8,"
+                "aecho=0.75:0.65:80|120:0.35|0.2,"
+                "acompressor=threshold=0.08:ratio=2:attack=2:release=30"
+            )
+            fx_cmd = ["ffmpeg", "-y", "-i", raw_vocals_path, "-af", fx_filter,
+                      "-codec:a", "libmp3lame", "-b:a", "192k", vocals_fx_path]
+            fx_result = subprocess.run(fx_cmd, capture_output=True, timeout=60)
+            vocals_path = vocals_fx_path if fx_result.returncode == 0 else raw_vocals_path
+
+            ffmpeg_cmd = [
+                "ffmpeg", "-y", "-stream_loop", "-1", "-i", music_path, "-i", vocals_path,
+                "-filter_complex",
+                f"[0:a]volume={req.music_volume}[bg];[1:a]volume=1.0[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=3[out]",
+                "-map", "[out]", "-codec:a", "libmp3lame", "-b:a", "192k",
+                "-t", str(req.duration), output_path
+            ]
+            mix_result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+            if mix_result.returncode != 0:
+                _vocals_jobs[job_id] = {"status": "failed", "error": "Mix failed"}
+                return
+
+            os.makedirs("/tmp/vocals", exist_ok=True)
+            track_id = str(uuid.uuid4())
+            dest = f"/tmp/vocals/{track_id}.mp3"
+            with open(output_path, "rb") as src_f, open(dest, "wb") as dst_f:
+                dst_f.write(src_f.read())
+
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT INTO tracks (id, user_id, style, duration, mood, file_url, tags) VALUES (?,?,?,?,?,?,?)",
+                (track_id, user_id, f"Vocals: {req.style}", req.duration, req.mood, music_url, req.voice)
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        _vocals_jobs[job_id] = {
+            "status": "done",
+            "track_id": track_id,
+            "stream_url": f"/stream/{track_id}",
+            "style": req.style,
+            "voice": req.voice,
+            "duration": req.duration,
+        }
+    except Exception as e:
+        _vocals_jobs[job_id] = {"status": "failed", "error": str(e)[:200]}
+
+
 @app.post("/vocals")
 async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
-    """Generate a music track and mix AI vocals singing the lyrics over it."""
+    """Start async vocals generation — returns job_id immediately, poll /vocals/status/{job_id}."""
     if not is_subscribed(user_id, get_token_email(authorization)):
         raise HTTPException(status_code=402, detail="Subscription required.")
 
-    import tempfile, subprocess, httpx as _httpx
+    job_id = str(uuid.uuid4())
+    _vocals_jobs[job_id] = {"status": "processing", "step": "Starting..."}
+    asyncio.ensure_future(_run_vocals_job(job_id, req, user_id))
+    return {"job_id": job_id, "status": "processing"}
 
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if not openai_key:
-        raise HTTPException(status_code=500, detail="OpenAI API key not configured.")
 
-    # Step 1: Generate music track via Mubert
-    try:
-        from backend.mubert_client import generate_track as gen
-    except ImportError:
-        from mubert_client import generate_track as gen
-
-    music_result = await gen(req.style, req.duration, req.mood)
-    music_url = music_result.get("url", "")
-    if not music_url:
-        raise HTTPException(status_code=500, detail="Music generation failed.")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        music_path  = os.path.join(tmpdir, "music.mp3")
-        vocals_path = os.path.join(tmpdir, "vocals.mp3")
-        output_path = os.path.join(tmpdir, "mixed.mp3")
-
-        # Step 2: Download music
-        async with _httpx.AsyncClient(timeout=60) as client:
-            r = await client.get(music_url)
-            with open(music_path, "wb") as f:
-                f.write(r.content)
-
-        # Step 3: Clean lyrics
-        clean_lyrics = req.lyrics
-        for tag in ['[Verse 1]','[Verse 2]','[Pre-Chorus]','[Chorus]','[Bridge]','[Outro]','[Hook]','[Intro]']:
-            clean_lyrics = clean_lyrics.replace(tag, '\n')
-        clean_lyrics = clean_lyrics.strip()[:4000]
-
-        # Step 3a: Try ElevenLabs first (much more human/expressive), fallback to OpenAI TTS
-        eleven_key = os.getenv("ELEVENLABS_API_KEY", "")
-        raw_vocals_path = os.path.join(tmpdir, "vocals_raw.mp3")
-
-        if eleven_key:
-            # ElevenLabs — expressive, human-sounding, near-singing quality
-            # Map voice name to ElevenLabs voice ID
-            ELEVEN_VOICES = {
-                "nova":    "EXAVITQu4vr4xnSDxMaL",  # Bella — warm female
-                "shimmer": "MF3mGyEYCl7XYWbV9V6O",  # Elli — young bright female
-                "alloy":   "pqHfZKP75CvOlQylNhV4",  # Bill — neutral
-                "echo":    "TxGEqnHWrfWFTfGW9XjX",  # Josh — clear male
-                "onyx":    "pNInz6obpgDQGcFmaJgB",  # Adam — deep male
-                "fable":   "yoZ06aMxZJJ28mfd3POQ",  # Sam — expressive
-            }
-            voice_id = ELEVEN_VOICES.get(req.voice, "EXAVITQu4vr4xnSDxMaL")
-            async with _httpx.AsyncClient(timeout=90) as client:
-                el_resp = await client.post(
-                    f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-                    headers={"xi-api-key": eleven_key, "Content-Type": "application/json"},
-                    json={
-                        "text": clean_lyrics,
-                        "model_id": "eleven_multilingual_v2",
-                        "voice_settings": {
-                            "stability": 0.25,        # low = more expressive/emotional
-                            "similarity_boost": 0.80,
-                            "style": 0.85,            # high = more stylized/singer-like
-                            "use_speaker_boost": True
-                        }
-                    }
-                )
-                if el_resp.status_code == 200:
-                    with open(raw_vocals_path, "wb") as f:
-                        f.write(el_resp.content)
-                else:
-                    eleven_key = ""  # fallback to OpenAI
-
-        if not eleven_key:
-            # OpenAI TTS fallback
-            async with _httpx.AsyncClient(timeout=60) as client:
-                tts_resp = await client.post(
-                    "https://api.openai.com/v1/audio/speech",
-                    headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                    json={"model": "tts-1-hd", "input": clean_lyrics, "voice": req.voice, "speed": 0.92}
-                )
-                if tts_resp.status_code != 200:
-                    raise HTTPException(status_code=500, detail=f"TTS failed: {tts_resp.text[:200]}")
-                with open(raw_vocals_path, "wb") as f:
-                    f.write(tts_resp.content)
-
-        # Step 3b: Process vocals with ffmpeg — add reverb, chorus, EQ for more human/musical feel
-        vocals_fx_path = os.path.join(tmpdir, "vocals_fx.mp3")
-        fx_filter = (
-            "acompressor=threshold=0.04:ratio=4:attack=5:release=80:makeup=2,"  # compression — even dynamics
-            "equalizer=f=150:width_type=h:width=80:g=-4,"                        # cut muddy bass
-            "equalizer=f=3500:width_type=h:width=600:g=4,"                       # boost presence/clarity
-            "equalizer=f=8000:width_type=h:width=1000:g=2,"                      # air/brightness
-            "chorus=0.6:0.9:50|60|80:0.4|0.35|0.3:0.25|0.2|0.22:2|1.5|1.8,"   # lush chorus harmonies
-            "aecho=0.75:0.65:80|120:0.35|0.2,"                                  # short reverb tails
-            "acompressor=threshold=0.08:ratio=2:attack=2:release=30"             # final polish
-        )
-        fx_cmd = ["ffmpeg", "-y", "-i", raw_vocals_path, "-af", fx_filter,
-                  "-codec:a", "libmp3lame", "-b:a", "192k", vocals_fx_path]
-        fx_result = subprocess.run(fx_cmd, capture_output=True, timeout=60)
-        vocals_path = vocals_fx_path if fx_result.returncode == 0 else raw_vocals_path
-
-        # Step 4: Mix with ffmpeg — loop music, processed vocals on top
-        music_vol = req.music_volume
-        ffmpeg_cmd = [
-            "ffmpeg", "-y",
-            "-stream_loop", "-1", "-i", music_path,
-            "-i", vocals_path,
-            "-filter_complex",
-            f"[0:a]volume={music_vol}[bg];[1:a]volume=1.0[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=3[out]",
-            "-map", "[out]",
-            "-codec:a", "libmp3lame", "-b:a", "192k",
-            "-t", str(req.duration),
-            output_path
-        ]
-        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Mix failed: {result.stderr.decode()[:300]}")
-
-        # Step 5: Save to /tmp/vocals/ for streaming endpoint
-        os.makedirs("/tmp/vocals", exist_ok=True)
-        track_id = str(uuid.uuid4())
-        dest = f"/tmp/vocals/{track_id}.mp3"
-        with open(output_path, "rb") as src_f, open(dest, "wb") as dst_f:
-            dst_f.write(src_f.read())
-
-    # Save track record
-    try:
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO tracks (id, user_id, style, duration, mood, file_url, tags) VALUES (?,?,?,?,?,?,?)",
-            (track_id, user_id, f"Vocals: {req.style}", req.duration, req.mood, music_url, req.voice)
-        )
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-    return {
-        "track_id": track_id,
-        "stream_url": f"/stream/{track_id}",
-        "style": req.style,
-        "voice": req.voice,
-        "duration": req.duration,
-        "music_url": music_url
-    }
+@app.get("/vocals/status/{job_id}")
+async def vocals_job_status(job_id: str, user_id: str = Depends(verify_token)):
+    """Poll vocals generation status. Returns {status, step} or {status:done, stream_url} or {status:failed, error}."""
+    job = _vocals_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @app.get("/stream/{track_id}")
