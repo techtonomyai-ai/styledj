@@ -106,8 +106,8 @@ def hash_password(pw: str) -> str:
 
 ensure_admin_subscribed()
 
-def create_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": datetime.utcnow() + timedelta(days=30)}
+def create_token(user_id: str, email: str = "") -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.utcnow() + timedelta(days=30)}
     return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def verify_token(authorization: Optional[str] = Header(None)) -> str:
@@ -120,15 +120,36 @@ def verify_token(authorization: Optional[str] = Header(None)) -> str:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-def is_subscribed(user_id: str) -> bool:
+def get_token_email(authorization: Optional[str] = Header(None)) -> str:
+    """Extract email from JWT — empty string if missing (old tokens)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return ""
+    try:
+        payload = pyjwt.decode(authorization.split(" ")[1], JWT_SECRET, algorithms=["HS256"])
+        return payload.get("email", "")
+    except Exception:
+        return ""
+
+def is_subscribed(user_id: str, email: str = "") -> bool:
+    # Admin bypass — always subscribed regardless of DB state or token age
+    admin_emails_lower = [e.lower() for e in ADMIN_EMAILS]
+    if email and email.lower() in admin_emails_lower:
+        return True
+    # Also bypass by fixed admin UUID (catches tokens that already have fixed UUID)
+    if user_id in ADMIN_FIXED_IDS.values():
+        return True
+
     conn = get_db()
-    user = conn.execute("SELECT subscribed, trial_start FROM users WHERE id=?", (user_id,)).fetchone()
+    user = conn.execute("SELECT subscribed, trial_start, email FROM users WHERE id=?", (user_id,)).fetchone()
     conn.close()
     if not user:
         return False
+    # Check email in DB too (safety net)
+    if user["email"] and user["email"].lower() in admin_emails_lower:
+        return True
     if user["subscribed"]:
         return True
-    # 7-day free trial
+    # 3-day free trial
     if user["trial_start"]:
         trial_start = datetime.fromisoformat(user["trial_start"])
         if datetime.utcnow() - trial_start < timedelta(days=3):
@@ -180,7 +201,7 @@ async def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="Email already registered")
     finally:
         conn.close()
-    return {"token": create_token(user_id), "user_id": user_id}
+    return {"token": create_token(user_id, req.email), "user_id": user_id}
 
 @app.post("/forgot-password")
 async def forgot_password(req: LoginRequest):
@@ -236,7 +257,7 @@ async def login(req: LoginRequest):
     conn.close()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": create_token(user["id"]), "user_id": user["id"]}
+    return {"token": create_token(user["id"], user["email"]), "user_id": user["id"]}
 
 @app.get("/me")
 async def me(user_id: str = Depends(verify_token)):
@@ -267,8 +288,8 @@ class VocalsRequest(BaseModel):
     music_volume: float = 0.35  # music at 35%, vocals at 100%
 
 @app.post("/lyrics")
-async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_token)):
-    if not is_subscribed(user_id):
+async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
+    if not is_subscribed(user_id, get_token_email(authorization)):
         raise HTTPException(status_code=402, detail="Subscription required.")
     try:
         import httpx as _httpx
@@ -316,9 +337,9 @@ Make them punchy, emotional, festival-ready. Use simple words that sound great w
 
 
 @app.post("/vocals")
-async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify_token)):
+async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
     """Generate a music track and mix AI vocals singing the lyrics over it."""
-    if not is_subscribed(user_id):
+    if not is_subscribed(user_id, get_token_email(authorization)):
         raise HTTPException(status_code=402, detail="Subscription required.")
 
     import tempfile, subprocess, httpx as _httpx
@@ -517,8 +538,8 @@ async def stream_track(track_id: str, request: Request):
                              media_type="audio/mpeg", headers=headers)
 
 @app.post("/generate")
-async def generate(req: GenerateRequest, user_id: str = Depends(verify_token)):
-    if not is_subscribed(user_id):
+async def generate(req: GenerateRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
+    if not is_subscribed(user_id, get_token_email(authorization)):
         raise HTTPException(status_code=402, detail="Subscription required. Start your free trial.")
     try:
         result = await generate_track(req.style, req.duration, req.mood)
@@ -578,10 +599,11 @@ async def analyze_sound(file: UploadFile = File(...), user_id: str = Depends(ver
 async def match_sound(
     file: UploadFile = File(...),
     duration: int = Form(60),
-    user_id: str = Depends(verify_token)
+    user_id: str = Depends(verify_token),
+    authorization: Optional[str] = Header(None)
 ):
     """Analyze uploaded audio and generate a copyright-free track matching the vibe."""
-    if not is_subscribed(user_id):
+    if not is_subscribed(user_id, get_token_email(authorization)):
         raise HTTPException(status_code=402, detail="Subscription required.")
     # Read audio bytes
     audio_bytes = await file.read()
