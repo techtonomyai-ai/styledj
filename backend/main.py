@@ -408,13 +408,53 @@ async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify
 
 
 @app.get("/stream/{track_id}")
-async def stream_track(track_id: str):
-    """Stream a mixed vocals track by ID."""
-    from fastapi.responses import FileResponse
+async def stream_track(track_id: str, request: Request):
+    """Stream a mixed vocals track — supports Range requests for iOS/Android seeking."""
+    from fastapi.responses import Response, StreamingResponse
+    import re as _re
+
     path = f"/tmp/vocals/{track_id}.mp3"
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Track not found or expired")
-    return FileResponse(path, media_type="audio/mpeg", filename=f"styledj_{track_id}.mp3")
+
+    file_size = os.path.getsize(path)
+    range_header = request.headers.get("range")
+
+    def iter_file(start=0, end=None):
+        end = end or file_size - 1
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = end - start + 1
+            chunk = 65536
+            while remaining > 0:
+                data = f.read(min(chunk, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    if range_header:
+        match = _re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else file_size - 1
+            end = min(end, file_size - 1)
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(end - start + 1),
+                "Content-Disposition": f'inline; filename="styledj_{track_id}.mp3"',
+            }
+            return StreamingResponse(iter_file(start, end), status_code=206,
+                                     media_type="audio/mpeg", headers=headers)
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Content-Disposition": f'inline; filename="styledj_{track_id}.mp3"',
+    }
+    return StreamingResponse(iter_file(), status_code=200,
+                             media_type="audio/mpeg", headers=headers)
 
 @app.post("/generate")
 async def generate(req: GenerateRequest, user_id: str = Depends(verify_token)):

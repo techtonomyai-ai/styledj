@@ -200,7 +200,7 @@
 
     <div class="player" id="matchPlayer" style="display:none;">
       <div class="track-info" id="matchTrackInfo"></div>
-      <audio id="matchAudioPlayer" controls style="width:100%;margin-bottom:12px;"></audio>
+      <audio id="matchAudioPlayer" controls playsinline preload="metadata" style="width:100%;margin-bottom:12px;"><source src="" type="audio/mpeg"/></audio>
       <button class="download-btn" onclick="downloadMatchTrackNew()" style="padding:14px;font-size:1rem;font-weight:700;">💾 Save Copyright-Free Match</button>
     </div>
   </div>
@@ -564,7 +564,7 @@
               <div style="color:var(--cyan);font-size:0.8rem;margin-top:2px;">✅ AI Vocals + Music · Royalty-Free</div>
             </div>
           </div>
-          <audio id="vocalsAudioPlayer" controls style="width:100%;margin-bottom:14px;border-radius:8px;"></audio>
+          <audio id="vocalsAudioPlayer" controls playsinline preload="metadata" style="width:100%;margin-bottom:14px;border-radius:8px;"><source id="vocalsAudioSource" src="" type="audio/mpeg"/></audio>
           <button onclick="downloadVocalsTrack()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">
             💾 Save Track with Vocals
           </button>
@@ -719,8 +719,10 @@
       }
       // Play via stream URL (avoids iOS base64 data URI size limit)
       const streamUrl = `${API}${data.stream_url}`;
-      vocalsTrackB64 = data.stream_url; // store stream_url for download
-      document.getElementById('vocalsAudioPlayer').src = streamUrl;
+      vocalsTrackB64 = data.stream_url;
+      const vap = document.getElementById('vocalsAudioPlayer');
+      document.getElementById('vocalsAudioSource').src = streamUrl;
+      vap.load(); // force reload source for Android/iOS
       document.getElementById('vocalsTrackInfo').textContent = `${style} · ${selectedVoice} · ${duration}s`;
       document.getElementById('vocalsTrackPlayer').style.display = 'block';
       document.getElementById('vocalsTrackPlayer').scrollIntoView({behavior:'smooth', block:'center'});
