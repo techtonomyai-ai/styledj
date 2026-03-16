@@ -38,7 +38,9 @@ STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000")
 
 # --- DB Setup ---
-DB_PATH = "styleDJ.db"
+_data_dir = os.getenv("DATA_DIR", "/data")
+os.makedirs(_data_dir, exist_ok=True)
+DB_PATH = os.path.join(_data_dir, "styleDJ.db")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)

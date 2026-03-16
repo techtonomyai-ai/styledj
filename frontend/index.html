@@ -705,10 +705,70 @@
 
 <footer>
   <p>© 2026 StyleDJ — Powered by Techtonomy LLC | All generated tracks are original and copyright-free.</p>
+  <p style="margin-top:10px;">
+    <a href="#" onclick="showLegalModal('privacy')" style="color:var(--muted);text-decoration:none;margin:0 12px;">Privacy Policy</a>
+    <a href="#" onclick="showLegalModal('terms')" style="color:var(--muted);text-decoration:none;margin:0 12px;">Terms of Service</a>
+    <a href="mailto:techtonomyllc@gmail.com" style="color:var(--muted);text-decoration:none;margin:0 12px;">Contact</a>
+  </p>
 </footer>
 
 <script>
   const API = window.location.origin;
+
+  function showLegalModal(type) {
+    const existing = document.getElementById('legalModal');
+    if (existing) existing.remove();
+    const isPrivacy = type === 'privacy';
+    const title = isPrivacy ? '🔒 Privacy Policy' : '📋 Terms of Service';
+    const content = isPrivacy ? `
+      <h3>Privacy Policy</h3>
+      <p><strong>Effective Date:</strong> March 16, 2026</p>
+      <p>StyleDJ ("we", "us", or "our") is operated by Techtonomy LLC. This Privacy Policy explains how we collect, use, and protect your information.</p>
+      <h4>Information We Collect</h4>
+      <p>We collect your email address and password (hashed) when you register. We collect usage data such as tracks generated and styles selected to improve the service.</p>
+      <h4>How We Use Your Information</h4>
+      <p>Your email is used to manage your account, send password resets, and communicate important service updates. We do not sell or share your personal data with third parties except as required to provide the service (e.g., Stripe for payment processing).</p>
+      <h4>Payment Information</h4>
+      <p>Payments are processed by Stripe. We do not store your credit card information. Stripe's privacy policy applies to all payment transactions.</p>
+      <h4>Generated Content</h4>
+      <p>AI-generated music tracks are produced using third-party AI services (Mubert, ElevenLabs, Mureka). Generated tracks are royalty-free for personal and commercial use under your subscription.</p>
+      <h4>Data Retention</h4>
+      <p>Account data is retained while your account is active. You may request deletion by emailing techtonomyllc@gmail.com.</p>
+      <h4>Contact</h4>
+      <p>Questions? Email us at techtonomyllc@gmail.com</p>
+    ` : `
+      <h3>Terms of Service</h3>
+      <p><strong>Effective Date:</strong> March 16, 2026</p>
+      <p>By using StyleDJ, you agree to these Terms of Service. StyleDJ is operated by Techtonomy LLC.</p>
+      <h4>Service Description</h4>
+      <p>StyleDJ is an AI-powered music generation platform. Users can generate royalty-free music tracks, sound matches, and AI vocal tracks based on DJ styles and preferences.</p>
+      <h4>Subscription & Billing</h4>
+      <p>StyleDJ offers a 3-day free trial followed by a $9.99/month subscription. You may cancel anytime. No refunds for partial billing periods. Subscriptions auto-renew monthly.</p>
+      <h4>Acceptable Use</h4>
+      <p>You may use generated tracks for personal and commercial purposes. You may not resell or redistribute StyleDJ as a standalone service. You may not use the platform for any illegal purposes.</p>
+      <h4>Intellectual Property</h4>
+      <p>AI-generated tracks are royalty-free. Techtonomy LLC retains rights to the StyleDJ platform, branding, and technology. User-provided content (lyrics, recordings) remains your property.</p>
+      <h4>Disclaimers</h4>
+      <p>StyleDJ is provided "as is." We do not guarantee uninterrupted service. AI-generated content may vary in quality. We are not liable for any damages arising from use of the service.</p>
+      <h4>Governing Law</h4>
+      <p>These terms are governed by the laws of the State of California, USA.</p>
+      <h4>Contact</h4>
+      <p>Questions? Email us at techtonomyllc@gmail.com</p>
+    `;
+    const modal = document.createElement('div');
+    modal.id = 'legalModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+      <div style="background:#12121A;border:1px solid #1E1E2E;border-radius:16px;padding:28px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="margin:0;font-size:1.1rem;">${title}</h2>
+          <button onclick="document.getElementById('legalModal').remove()" style="background:transparent;border:none;color:#888;font-size:1.5rem;cursor:pointer;">✕</button>
+        </div>
+        <div style="color:#aaa;font-size:0.88rem;line-height:1.7;">${content}</div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  }
 
   function showToast(msg, duration=4000) {
     const t = document.createElement('div');
