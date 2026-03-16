@@ -481,11 +481,24 @@
     <div class="form-group">
       <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:8px;">DJ Style</label>
       <select id="lyricsStyle" style="width:100%;background:#0D0D15;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:0.95rem;">
-        <option>Martin Garrix</option><option>Anyma</option><option>Armin van Buuren</option>
-        <option>Avicii</option><option>Calvin Harris</option><option>Charlotte de Witte</option>
-        <option>David Guetta</option><option>deadmau5</option><option>Daft Punk</option>
-        <option>Illenium</option><option>Kygo</option><option>Marshmello</option>
-        <option>Porter Robinson</option><option>Skrillex</option><option>Tiësto</option>
+        <optgroup label="🏟️ Big Room / Progressive House"><option>Martin Garrix</option><option>Swedish House Mafia</option><option>Hardwell</option><option>W&W</option><option>Nicky Romero</option><option>Avicii</option><option>deadmau5</option><option>Eric Prydz</option></optgroup>
+        <optgroup label="🌀 Trance / Uplifting Trance"><option>Armin van Buuren</option><option>Tiësto</option><option>Paul van Dyk</option><option>Ferry Corsten</option><option>Andrew Rayel</option><option>KSHMR</option><option>Above &amp; Beyond</option><option>Dash Berlin</option></optgroup>
+        <optgroup label="⚙️ Techno"><option>Charlotte de Witte</option><option>Amelie Lens</option><option>Adam Beyer</option><option>Reinier Zonneveld</option><option>SPFDJ</option><option>I Hate Models</option></optgroup>
+        <optgroup label="🖤 Melodic Techno / Afterlife"><option>Tale Of Us</option><option>Anyma</option><option>Massano</option><option>Innellea</option><option>Stephan Bodzin</option></optgroup>
+        <optgroup label="🎶 House / Chicago House"><option>Daft Punk</option><option>MK</option><option>Todd Terry</option><option>Larry Heard</option><option>Marshall Jefferson</option></optgroup>
+        <optgroup label="🔧 Tech House"><option>Fisher</option><option>Chris Lake</option><option>John Summit</option><option>Jamie Jones</option><option>Patrick Topping</option><option>Hot Since 82</option></optgroup>
+        <optgroup label="🌊 Deep House"><option>Solomun</option><option>Black Coffee</option><option>Disclosure</option><option>Lane 8</option><option>Kerri Chandler</option></optgroup>
+        <optgroup label="⚡ Electro House / French House"><option>Calvin Harris</option><option>David Guetta</option><option>Zedd</option><option>Justice</option><option>Gesaffelstein</option><option>Boys Noize</option></optgroup>
+        <optgroup label="🌊 Future Bass / Melodic Dubstep"><option>Marshmello</option><option>Illenium</option><option>Porter Robinson</option><option>Flume</option><option>San Holo</option><option>Slushii</option></optgroup>
+        <optgroup label="💥 Dubstep / Bass"><option>Skrillex</option><option>Excision</option><option>Virtual Riot</option><option>Subtronics</option><option>Svdden Death</option><option>Zomboy</option></optgroup>
+        <optgroup label="🥁 Drum &amp; Bass"><option>Chase &amp; Status</option><option>Pendulum</option><option>Sub Focus</option><option>Andy C</option><option>Goldie</option><option>Roni Size</option></optgroup>
+        <optgroup label="🌴 Tropical House / Chill"><option>Kygo</option><option>Thomas Jack</option><option>Klingande</option></optgroup>
+        <optgroup label="🎹 Ambient / Downtempo"><option>Tycho</option><option>Bonobo</option><option>Boards of Canada</option><option>Brian Eno</option></optgroup>
+        <optgroup label="💃 Nu-Disco / Funk"><option>Parcels</option><option>Chromeo</option><option>Tensnake</option><option>Todd Terje</option></optgroup>
+        <optgroup label="🔊 Hardstyle / Hardcore"><option>Headhunterz</option><option>Brennan Heart</option><option>Zatox</option><option>Angerfist</option></optgroup>
+        <optgroup label="🎛️ Breakbeat / Breaks"><option>The Prodigy</option><option>Crystal Method</option><option>Fatboy Slim</option><option>Chemical Brothers</option></optgroup>
+        <optgroup label="🌀 Psytrance / Goa"><option>Astrix</option><option>Infected Mushroom</option><option>Vini Vici</option><option>Ace Ventura</option><option>Shpongle</option></optgroup>
+        <optgroup label="🌍 Amapiano / Afro House"><option>Black Coffee</option><option>Themba</option><option>DJ Maphorisa</option><option>Kabza De Small</option></optgroup>
       </select>
     </div>
 
@@ -551,9 +564,13 @@
       <button onclick="generateWithVocals()" id="vocalsTrackBtn" style="width:100%;margin-top:16px;padding:18px;background:linear-gradient(135deg,#7B2FBE,#00D4FF);border:none;border-radius:12px;color:#fff;font-size:1.1rem;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(123,47,190,0.4);">
         🎤 Generate Track with Vocals
       </button>
-      <div id="vocalsTrackLoading" style="display:none;text-align:center;padding:20px;color:var(--cyan);">
-        <div class="spinner"></div>
-        <div style="margin-top:10px;font-size:0.9rem;">Generating music + vocals + mixing...<br/><span style="color:var(--muted);font-size:0.8rem;">This takes ~30 seconds</span></div>
+      <div id="vocalsTrackLoading" style="display:none;text-align:center;padding:24px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);border-radius:12px;margin-top:12px;">
+        <div style="font-size:2rem;animation:spin 1.5s linear infinite;display:inline-block;">🎤</div>
+        <div style="margin-top:12px;color:var(--cyan);font-weight:700;font-size:1rem;" id="vocalsLoadingText">Generating AI vocals...</div>
+        <div style="margin-top:6px;color:var(--muted);font-size:0.8rem;">Step <span id="vocalsStep">1</span>/3 — takes 30–60 seconds, please wait!</div>
+        <div style="margin-top:12px;background:#0D0D15;border-radius:8px;height:6px;overflow:hidden;">
+          <div id="vocalsProgress" style="height:100%;background:linear-gradient(135deg,var(--purple),var(--cyan));width:5%;transition:width 2s ease;border-radius:8px;"></div>
+        </div>
       </div>
       <div id="vocalsTrackPlayer" style="display:none;margin-top:16px;">
         <div style="background:linear-gradient(135deg,rgba(123,47,190,0.2),rgba(0,212,255,0.15));border:1px solid rgba(0,212,255,0.3);border-radius:16px;padding:20px;">
@@ -720,8 +737,30 @@
 
     const btn = document.getElementById('vocalsTrackBtn');
     btn.disabled = true;
+    btn.textContent = '⏳ Working...';
     document.getElementById('vocalsTrackLoading').style.display = 'block';
     document.getElementById('vocalsTrackPlayer').style.display = 'none';
+    document.getElementById('vocalsTrackLoading').scrollIntoView({behavior:'smooth',block:'center'});
+
+    // Animate progress bar
+    const steps = [
+      {pct:'15%', text:'Generating AI vocals...', step:'1'},
+      {pct:'40%', text:'Creating music track...', step:'2'},
+      {pct:'75%', text:'Mixing vocals + music...', step:'3'},
+      {pct:'90%', text:'Almost done...', step:'3'},
+    ];
+    let si = 0;
+    const prog = setInterval(() => {
+      if (si < steps.length) {
+        const s = steps[si++];
+        const p = document.getElementById('vocalsProgress');
+        const t = document.getElementById('vocalsLoadingText');
+        const st = document.getElementById('vocalsStep');
+        if (p) p.style.width = s.pct;
+        if (t) t.textContent = s.text;
+        if (st) st.textContent = s.step;
+      }
+    }, 10000);
 
     try {
       const res = await fetch(`${API}/vocals`, {
@@ -752,8 +791,12 @@
     } catch(e) {
       showToast('⚠️ ' + (e.message || 'Vocals generation failed — try again'));
     } finally {
+      clearInterval(prog);
       btn.disabled = false;
+      btn.textContent = '🎤 Generate Track with Vocals';
       document.getElementById('vocalsTrackLoading').style.display = 'none';
+      const p = document.getElementById('vocalsProgress');
+      if (p) p.style.width = '5%';
     }
   }
 
