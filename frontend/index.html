@@ -556,9 +556,9 @@
       <div style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">⏱️ Track Duration</span>
-          <span id="vocDurLabel" style="color:var(--cyan);font-weight:600;font-size:0.85rem;">2 min</span>
+          <span id="vocDurLabel" style="color:var(--cyan);font-weight:600;font-size:0.85rem;">1 min</span>
         </div>
-        <input type="range" id="vocDurSlider" min="60" max="600" value="120" step="30" oninput="updateVocalDur()" style="width:100%;"/>
+        <input type="range" id="vocDurSlider" min="60" max="300" value="60" step="30" oninput="updateVocalDur()" style="width:100%;"/>
       </div>
 
       <button onclick="generateWithVocals()" id="vocalsTrackBtn" style="width:100%;margin-top:16px;padding:18px;background:linear-gradient(135deg,#7B2FBE,#00D4FF);border:none;border-radius:12px;color:#fff;font-size:1.1rem;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(123,47,190,0.4);">
@@ -732,7 +732,7 @@
     const lyrics = document.getElementById('lyricsText').textContent;
     if (!lyrics || lyrics.length < 10) { showToast('⚠️ Generate lyrics first, then add vocals'); return; }
     const style = document.getElementById('lyricsStyle').value;
-    const duration = parseInt(document.getElementById('vocDurSlider').value) || 120;
+    const duration = parseInt(document.getElementById('vocDurSlider').value) || 60;
     const musicVol = parseInt(document.getElementById('musicVolSlider').value) / 100;
 
     const btn = document.getElementById('vocalsTrackBtn');
@@ -763,21 +763,29 @@
     }, 10000);
 
     try {
-      const res = await fetch(`${API}/vocals`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
-        body: JSON.stringify({
-          lyrics, style,
-          mood: lyricsMood,
-          voice: selectedVoice,
-          duration,
-          music_volume: musicVol
-        })
-      });
-      const data = await res.json();
+      const controller = new AbortController();
+      const fetchTimer = setTimeout(() => controller.abort(), 100000); // 100s timeout
+      let res, data;
+      try {
+        res = await fetch(`${API}/vocals`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
+          body: JSON.stringify({ lyrics, style, mood: lyricsMood, voice: selectedVoice, duration, music_volume: musicVol }),
+          signal: controller.signal
+        });
+        clearTimeout(fetchTimer);
+        data = await res.json();
+      } catch(fetchErr) {
+        clearTimeout(fetchTimer);
+        if (fetchErr.name === 'AbortError') throw new Error('Request timed out — server took too long. Try a shorter duration.');
+        throw new Error('Network error — check your connection and try again.');
+      }
       if (!res.ok) {
-        if (res.status === 402) { showToast('⚠️ Please subscribe to use vocals'); return; }
-        throw new Error(data.detail || 'Vocals generation failed');
+        if (res.status === 402) {
+          showToast('⚠️ Subscription issue — try signing out and back in', 4000);
+          return;
+        }
+        throw new Error(data.detail || `Server error ${res.status}`);
       }
       // Play via stream URL (avoids iOS base64 data URI size limit)
       const streamUrl = `${API}${data.stream_url}`;
