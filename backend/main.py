@@ -378,12 +378,14 @@ async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=f"Mix failed: {result.stderr.decode()[:300]}")
 
-        # Step 5: Upload mixed file — serve from memory via base64 or store temporarily
-        with open(output_path, "rb") as f:
-            mixed_bytes = f.read()
+        # Step 5: Save to /tmp/vocals/ for streaming endpoint
+        os.makedirs("/tmp/vocals", exist_ok=True)
+        track_id = str(uuid.uuid4())
+        dest = f"/tmp/vocals/{track_id}.mp3"
+        with open(output_path, "rb") as src_f, open(dest, "wb") as dst_f:
+            dst_f.write(src_f.read())
 
     # Save track record
-    track_id = str(uuid.uuid4())
     try:
         conn = get_db()
         conn.execute(
@@ -395,18 +397,24 @@ async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify
     except Exception:
         pass
 
-    # Return mixed audio as base64 so frontend can play/download directly
-    import base64
-    audio_b64 = base64.b64encode(mixed_bytes).decode()
     return {
         "track_id": track_id,
-        "audio_b64": audio_b64,
+        "stream_url": f"/stream/{track_id}",
         "style": req.style,
         "voice": req.voice,
         "duration": req.duration,
-        "music_url": music_url  # fallback instrumental
+        "music_url": music_url
     }
 
+
+@app.get("/stream/{track_id}")
+async def stream_track(track_id: str):
+    """Stream a mixed vocals track by ID."""
+    from fastapi.responses import FileResponse
+    path = f"/tmp/vocals/{track_id}.mp3"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Track not found or expired")
+    return FileResponse(path, media_type="audio/mpeg", filename=f"styledj_{track_id}.mp3")
 
 @app.post("/generate")
 async def generate(req: GenerateRequest, user_id: str = Depends(verify_token)):

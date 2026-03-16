@@ -717,10 +717,10 @@
         if (res.status === 402) { showToast('⚠️ Please subscribe to use vocals'); return; }
         throw new Error(data.detail || 'Vocals generation failed');
       }
-      // Play from base64
-      vocalsTrackB64 = data.audio_b64;
-      const audioSrc = `data:audio/mpeg;base64,${data.audio_b64}`;
-      document.getElementById('vocalsAudioPlayer').src = audioSrc;
+      // Play via stream URL (avoids iOS base64 data URI size limit)
+      const streamUrl = `${API}${data.stream_url}`;
+      vocalsTrackB64 = data.stream_url; // store stream_url for download
+      document.getElementById('vocalsAudioPlayer').src = streamUrl;
       document.getElementById('vocalsTrackInfo').textContent = `${style} · ${selectedVoice} · ${duration}s`;
       document.getElementById('vocalsTrackPlayer').style.display = 'block';
       document.getElementById('vocalsTrackPlayer').scrollIntoView({behavior:'smooth', block:'center'});
@@ -735,10 +735,7 @@
   function downloadVocalsTrack() {
     if (!vocalsTrackB64) return;
     const style = document.getElementById('lyricsStyle').value.replace(/ /g,'_');
-    const a = document.createElement('a');
-    a.href = `data:audio/mpeg;base64,${vocalsTrackB64}`;
-    a.download = `styledj_${style}_vocals.mp3`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    showSaveModal(`${API}${vocalsTrackB64}`, `styledj_${style}_vocals.mp3`);
   }
 
   function setLyricsMood(mood) {
