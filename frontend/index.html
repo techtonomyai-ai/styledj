@@ -92,7 +92,7 @@
 
 <nav>
   <div class="logo">⚡ StyleDJ</div>
-  <div style="display:flex;gap:8px;">
+  <div style="display:flex;gap:8px;align-items:center;" id="navButtons">
     <button class="nav-btn" onclick="showAuthModal('login')" style="background:transparent;border:1px solid var(--border);color:var(--text);">Sign In</button>
     <button class="nav-btn" onclick="showAuthModal('register')">Start Free Trial</button>
   </div>
@@ -648,6 +648,29 @@
     setTimeout(() => t.remove(), duration);
   }
   let token = localStorage.getItem('styledj_token');
+
+  function updateNav() {
+    const nav = document.getElementById('navButtons');
+    if (!nav) return;
+    if (token) {
+      nav.innerHTML = `
+        <span style="color:var(--muted);font-size:0.8rem;display:none;" id="navEmail"></span>
+        <button onclick="signOut()" style="background:transparent;border:1px solid #444;color:#888;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.85rem;">Sign Out</button>`;
+    } else {
+      nav.innerHTML = `
+        <button class="nav-btn" onclick="showAuthModal('login')" style="background:transparent;border:1px solid var(--border);color:var(--text);">Sign In</button>
+        <button class="nav-btn" onclick="showAuthModal('register')">Start Free Trial</button>`;
+    }
+  }
+
+  function signOut() {
+    token = null;
+    localStorage.removeItem('styledj_token');
+    updateNav();
+    showToast('✅ Signed out', 2000);
+  }
+
+  updateNav();
   let currentMood = 'energetic';
   let currentTrackUrl = '';
 
@@ -1201,6 +1224,7 @@
       token = data.token;
       localStorage.setItem('styledj_token', token);
       document.getElementById('authModal').remove();
+      updateNav();
       showToast(mode === 'login' ? '✅ Welcome back!' : '🎉 Account created! 3-day free trial started.', 3000);
     } catch(e) { showToast('⚠️ ' + (e.message || 'Something went wrong')); }
   }
