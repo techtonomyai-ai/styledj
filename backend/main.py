@@ -74,21 +74,28 @@ def init_db():
 
 init_db()
 
+# Fixed UUIDs for admin accounts — NEVER change these so old JWTs always work across redeploys
+ADMIN_FIXED_IDS = {
+    "techtonomyllc@gmail.com": "aaaaaaaa-0000-0000-0000-000000000001",
+    "techtonomy.ai@gmail.com": "aaaaaaaa-0000-0000-0000-000000000002",
+}
+
 def ensure_admin_subscribed():
-    """Keep admin accounts subscribed across redeploys — INSERT if not exists, UPDATE if exists."""
+    """Keep admin accounts subscribed with FIXED UUIDs so tokens survive DB resets."""
     conn = get_db()
     for email in ADMIN_EMAILS:
+        fixed_id = ADMIN_FIXED_IDS.get(email.lower(), ADMIN_FIXED_IDS.get(email))
+        if not fixed_id:
+            continue
         existing = conn.execute("SELECT id FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone()
         if existing:
-            conn.execute("UPDATE users SET subscribed=1 WHERE LOWER(email)=LOWER(?)", (email,))
+            # Update to fixed ID + ensure subscribed
+            conn.execute("UPDATE users SET id=?, subscribed=1 WHERE LOWER(email)=LOWER(?)", (fixed_id, email))
         else:
-            import uuid as _uuid
-            new_id = str(_uuid.uuid4())
-            # Default password hash for "techtonomy2026" — admin can reset via forgot password
             pw_hash = hash_password("techtonomy2026")
             conn.execute(
                 "INSERT INTO users (id, email, password_hash, subscribed, trial_start) VALUES (?,?,?,1,?)",
-                (new_id, email, pw_hash, datetime.utcnow().isoformat())
+                (fixed_id, email, pw_hash, datetime.utcnow().isoformat())
             )
     conn.commit()
     conn.close()
