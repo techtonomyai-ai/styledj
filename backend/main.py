@@ -243,6 +243,14 @@ class LyricsRequest(BaseModel):
     theme: str = ""
     mood: str = "energetic"
 
+class VocalsRequest(BaseModel):
+    lyrics: str
+    style: str
+    mood: str = "energetic"
+    voice: str = "nova"        # OpenAI TTS voices: alloy, echo, fable, nova, onyx, shimmer
+    duration: int = 120
+    music_volume: float = 0.35  # music at 35%, vocals at 100%
+
 @app.post("/lyrics")
 async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_token)):
     if not is_subscribed(user_id):
@@ -286,6 +294,107 @@ Make them punchy, emotional, festival-ready. Use simple words that sound great w
         return {"lyrics": lyrics, "style": req.style, "theme": req.theme}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lyrics generation failed: {str(e)}")
+
+
+@app.post("/vocals")
+async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify_token)):
+    """Generate a music track and mix AI vocals singing the lyrics over it."""
+    if not is_subscribed(user_id):
+        raise HTTPException(status_code=402, detail="Subscription required.")
+
+    import tempfile, subprocess, httpx as _httpx
+
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if not openai_key:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured.")
+
+    # Step 1: Generate music track via Mubert
+    try:
+        from backend.mubert_client import generate_track as gen
+    except ImportError:
+        from mubert_client import generate_track as gen
+
+    music_result = await gen(req.style, req.duration, req.mood)
+    music_url = music_result.get("url", "")
+    if not music_url:
+        raise HTTPException(status_code=500, detail="Music generation failed.")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        music_path  = os.path.join(tmpdir, "music.mp3")
+        vocals_path = os.path.join(tmpdir, "vocals.mp3")
+        output_path = os.path.join(tmpdir, "mixed.mp3")
+
+        # Step 2: Download music
+        async with _httpx.AsyncClient(timeout=60) as client:
+            r = await client.get(music_url)
+            with open(music_path, "wb") as f:
+                f.write(r.content)
+
+        # Step 3: Generate vocals via OpenAI TTS
+        clean_lyrics = req.lyrics.replace('[Verse 1]','').replace('[Pre-Chorus]','') \
+            .replace('[Chorus]','').replace('[Verse 2]','').replace('[Bridge]','') \
+            .replace('[Outro]','').replace('[Hook]','').strip()
+        # Keep it under 4096 chars (OpenAI TTS limit)
+        clean_lyrics = clean_lyrics[:4000]
+
+        async with _httpx.AsyncClient(timeout=60) as client:
+            tts_resp = await client.post(
+                "https://api.openai.com/v1/audio/speech",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={"model": "tts-1", "input": clean_lyrics, "voice": req.voice, "speed": 0.95}
+            )
+            if tts_resp.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"TTS failed: {tts_resp.text[:200]}")
+            with open(vocals_path, "wb") as f:
+                f.write(tts_resp.content)
+
+        # Step 4: Mix with ffmpeg — loop music, vocals on top
+        music_vol = req.music_volume
+        vocals_vol = 1.0
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-stream_loop", "-1", "-i", music_path,   # loop music
+            "-i", vocals_path,                          # vocals
+            "-filter_complex",
+            f"[0:a]volume={music_vol}[bg];[1:a]volume={vocals_vol}[fg];[bg][fg]amix=inputs=2:duration=first:dropout_transition=2[out]",
+            "-map", "[out]",
+            "-codec:a", "libmp3lame", "-b:a", "192k",
+            "-t", str(req.duration),
+            output_path
+        ]
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=120)
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"Mix failed: {result.stderr.decode()[:300]}")
+
+        # Step 5: Upload mixed file — serve from memory via base64 or store temporarily
+        with open(output_path, "rb") as f:
+            mixed_bytes = f.read()
+
+    # Save track record
+    track_id = str(uuid.uuid4())
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO tracks (id, user_id, style, duration, mood, file_url, tags) VALUES (?,?,?,?,?,?,?)",
+            (track_id, user_id, f"Vocals: {req.style}", req.duration, req.mood, music_url, req.voice)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    # Return mixed audio as base64 so frontend can play/download directly
+    import base64
+    audio_b64 = base64.b64encode(mixed_bytes).decode()
+    return {
+        "track_id": track_id,
+        "audio_b64": audio_b64,
+        "style": req.style,
+        "voice": req.voice,
+        "duration": req.duration,
+        "music_url": music_url  # fallback instrumental
+    }
+
 
 @app.post("/generate")
 async def generate(req: GenerateRequest, user_id: str = Depends(verify_token)):

@@ -517,8 +517,63 @@
         </div>
         <pre id="lyricsText" style="white-space:pre-wrap;color:#E0E0FF;font-family:inherit;font-size:0.9rem;line-height:1.7;margin:0;"></pre>
       </div>
-      <button onclick="switchTab('style')" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;">
-        🎧 Generate Track for These Lyrics
+      <!-- Voice selector -->
+      <div style="margin-top:16px;">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">🎤 Vocal Style</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="voiceSelector">
+          <button onclick="setVoice('nova')" class="voice-btn active" data-voice="nova" style="padding:10px 6px;border-radius:8px;border:1px solid var(--purple);background:rgba(123,47,190,0.15);color:#fff;cursor:pointer;font-size:0.82rem;font-weight:600;">✨ Nova<br/><span style="font-size:0.7rem;color:var(--muted);">Warm female</span></button>
+          <button onclick="setVoice('shimmer')" class="voice-btn" data-voice="shimmer" style="padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-size:0.82rem;font-weight:600;">🌟 Shimmer<br/><span style="font-size:0.7rem;">Bright female</span></button>
+          <button onclick="setVoice('alloy')" class="voice-btn" data-voice="alloy" style="padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-size:0.82rem;font-weight:600;">⚡ Alloy<br/><span style="font-size:0.7rem;">Neutral</span></button>
+          <button onclick="setVoice('echo')" class="voice-btn" data-voice="echo" style="padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-size:0.82rem;font-weight:600;">🔊 Echo<br/><span style="font-size:0.7rem;">Male clear</span></button>
+          <button onclick="setVoice('onyx')" class="voice-btn" data-voice="onyx" style="padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-size:0.82rem;font-weight:600;">🌑 Onyx<br/><span style="font-size:0.7rem;">Deep male</span></button>
+          <button onclick="setVoice('fable')" class="voice-btn" data-voice="fable" style="padding:10px 6px;border-radius:8px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-size:0.82rem;font-weight:600;">📖 Fable<br/><span style="font-size:0.7rem;">Expressive</span></button>
+        </div>
+      </div>
+
+      <!-- Music volume slider -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">🎚️ Music Volume</span>
+          <span id="musicVolLabel" style="color:var(--cyan);font-weight:600;font-size:0.85rem;">35%</span>
+        </div>
+        <input type="range" id="musicVolSlider" min="10" max="80" value="35" step="5" oninput="document.getElementById('musicVolLabel').textContent=this.value+'%'" style="width:100%;"/>
+      </div>
+
+      <!-- Track duration -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">⏱️ Track Duration</span>
+          <span id="vocDurLabel" style="color:var(--cyan);font-weight:600;font-size:0.85rem;">2 min</span>
+        </div>
+        <input type="range" id="vocDurSlider" min="60" max="600" value="120" step="30" oninput="updateVocalDur()" style="width:100%;"/>
+      </div>
+
+      <button onclick="generateWithVocals()" id="vocalsTrackBtn" class="generate-btn" style="margin-top:16px;">
+        🎤 Generate Track with Vocals
+      </button>
+      <div id="vocalsTrackLoading" style="display:none;text-align:center;padding:20px;color:var(--cyan);">
+        <div class="spinner"></div>
+        <div style="margin-top:10px;font-size:0.9rem;">Generating music + vocals + mixing...<br/><span style="color:var(--muted);font-size:0.8rem;">This takes ~30 seconds</span></div>
+      </div>
+      <div id="vocalsTrackPlayer" style="display:none;margin-top:16px;">
+        <div style="background:linear-gradient(135deg,rgba(123,47,190,0.2),rgba(0,212,255,0.15));border:1px solid rgba(0,212,255,0.3);border-radius:16px;padding:20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="width:48px;height:48px;background:linear-gradient(135deg,var(--purple),var(--cyan));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">🎤</div>
+            <div>
+              <div id="vocalsTrackInfo" style="font-weight:700;color:#E0E0FF;">Track with Vocals</div>
+              <div style="color:var(--cyan);font-size:0.8rem;margin-top:2px;">✅ AI Vocals + Music · Royalty-Free</div>
+            </div>
+          </div>
+          <audio id="vocalsAudioPlayer" controls style="width:100%;margin-bottom:14px;border-radius:8px;"></audio>
+          <button onclick="downloadVocalsTrack()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">
+            💾 Save Track with Vocals
+          </button>
+        </div>
+      </div>
+    </div>
+
+      <button onclick="switchTab('style')" style="width:100%;margin-top:12px;padding:14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-weight:600;cursor:pointer;font-size:0.9rem;">
+        🎧 Generate Instrumental Only
       </button>
     </div>
   </div>
@@ -611,8 +666,80 @@
   function scrollToPricing() { document.getElementById('pricing').scrollIntoView({behavior:'smooth'}); }
 
   // --- TABS ---
-  // --- LYRICS ---
+  // --- LYRICS & VOCALS ---
   let lyricsMood = 'energetic';
+  let selectedVoice = 'nova';
+  let vocalsTrackB64 = null;
+
+  function setVoice(voice) {
+    selectedVoice = voice;
+    document.querySelectorAll('#voiceSelector .voice-btn').forEach(b => {
+      const active = b.dataset.voice === voice;
+      b.style.borderColor = active ? 'var(--purple)' : 'var(--border)';
+      b.style.background = active ? 'rgba(123,47,190,0.15)' : '#0D0D15';
+      b.style.color = active ? '#fff' : 'var(--muted)';
+    });
+  }
+
+  function updateVocalDur() {
+    const val = parseInt(document.getElementById('vocDurSlider').value);
+    const label = val < 60 ? `${val}s` : `${Math.round(val/60)} min`;
+    document.getElementById('vocDurLabel').textContent = label;
+  }
+
+  async function generateWithVocals() {
+    if (!token) { showAuthModal('register'); return; }
+    const lyrics = document.getElementById('lyricsText').textContent;
+    if (!lyrics || lyrics.length < 10) { showToast('⚠️ Generate lyrics first, then add vocals'); return; }
+    const style = document.getElementById('lyricsStyle').value;
+    const duration = parseInt(document.getElementById('vocDurSlider').value) || 120;
+    const musicVol = parseInt(document.getElementById('musicVolSlider').value) / 100;
+
+    const btn = document.getElementById('vocalsTrackBtn');
+    btn.disabled = true;
+    document.getElementById('vocalsTrackLoading').style.display = 'block';
+    document.getElementById('vocalsTrackPlayer').style.display = 'none';
+
+    try {
+      const res = await fetch(`${API}/vocals`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
+        body: JSON.stringify({
+          lyrics, style,
+          mood: lyricsMood,
+          voice: selectedVoice,
+          duration,
+          music_volume: musicVol
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 402) { showToast('⚠️ Please subscribe to use vocals'); return; }
+        throw new Error(data.detail || 'Vocals generation failed');
+      }
+      // Play from base64
+      vocalsTrackB64 = data.audio_b64;
+      const audioSrc = `data:audio/mpeg;base64,${data.audio_b64}`;
+      document.getElementById('vocalsAudioPlayer').src = audioSrc;
+      document.getElementById('vocalsTrackInfo').textContent = `${style} · ${selectedVoice} · ${duration}s`;
+      document.getElementById('vocalsTrackPlayer').style.display = 'block';
+      document.getElementById('vocalsTrackPlayer').scrollIntoView({behavior:'smooth', block:'center'});
+    } catch(e) {
+      showToast('⚠️ ' + (e.message || 'Vocals generation failed — try again'));
+    } finally {
+      btn.disabled = false;
+      document.getElementById('vocalsTrackLoading').style.display = 'none';
+    }
+  }
+
+  function downloadVocalsTrack() {
+    if (!vocalsTrackB64) return;
+    const style = document.getElementById('lyricsStyle').value.replace(/ /g,'_');
+    const a = document.createElement('a');
+    a.href = `data:audio/mpeg;base64,${vocalsTrackB64}`;
+    a.download = `styledj_${style}_vocals.mp3`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
 
   function setLyricsMood(mood) {
     lyricsMood = mood;
