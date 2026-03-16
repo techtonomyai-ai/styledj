@@ -552,6 +552,15 @@
         <input type="range" id="musicVolSlider" min="10" max="80" value="35" step="5" oninput="document.getElementById('musicVolLabel').textContent=this.value+'%'" style="width:100%;"/>
       </div>
 
+      <!-- Voice Volume -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">🎤 Voice Volume</span>
+          <span id="voiceVolLabel" style="color:var(--cyan);font-weight:600;font-size:0.85rem;">100%</span>
+        </div>
+        <input type="range" id="voiceVolSlider" min="20" max="200" value="100" step="10" oninput="document.getElementById('voiceVolLabel').textContent=this.value+'%'" style="width:100%;"/>
+      </div>
+
       <!-- Track duration -->
       <div style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -734,6 +743,7 @@
     const style = document.getElementById('lyricsStyle').value;
     const duration = parseInt(document.getElementById('vocDurSlider').value) || 60;
     const musicVol = parseInt(document.getElementById('musicVolSlider').value) / 100;
+    const voiceVol = parseInt(document.getElementById('voiceVolSlider').value) / 100;
 
     const btn = document.getElementById('vocalsTrackBtn');
     btn.disabled = true;
@@ -767,7 +777,7 @@
       const startRes = await fetch(`${API}/vocals`, {
         method: 'POST',
         headers: {'Content-Type':'application/json', 'Authorization': `Bearer ${token}`},
-        body: JSON.stringify({ lyrics, style, mood: lyricsMood, voice: selectedVoice, duration, music_volume: musicVol })
+        body: JSON.stringify({ lyrics, style, mood: lyricsMood, voice: selectedVoice, duration, music_volume: musicVol, voice_volume: voiceVol })
       });
       if (!startRes.ok) {
         const err = await startRes.json().catch(() => ({}));

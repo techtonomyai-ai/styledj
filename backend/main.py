@@ -289,6 +289,7 @@ class VocalsRequest(BaseModel):
     voice: str = "nova"        # OpenAI TTS voices: alloy, echo, fable, nova, onyx, shimmer
     duration: int = 120
     music_volume: float = 0.35  # music at 35%, vocals at 100%
+    voice_volume: float = 1.0   # voice/vocals volume (0.2–2.0)
 
 @app.post("/lyrics")
 async def generate_lyrics(req: LyricsRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
@@ -484,10 +485,10 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
                 "-i", h3,                                 # [4] sub harmony
                 "-filter_complex",
                 f"[0:a]volume={req.music_volume}[bg];"
-                "[1:a]volume=1.0[lead];"
-                "[2:a]volume=0.45[h1];"
-                "[3:a]volume=0.35[h2];"
-                "[4:a]volume=0.20[h3];"
+                f"[1:a]volume={req.voice_volume}[lead];"
+                f"[2:a]volume={round(req.voice_volume*0.45,2)}[h1];"
+                f"[3:a]volume={round(req.voice_volume*0.35,2)}[h2];"
+                f"[4:a]volume={round(req.voice_volume*0.20,2)}[h3];"
                 "[lead][h1][h2][h3]amix=inputs=4:duration=longest:dropout_transition=2[vocals];"
                 "[bg][vocals]amix=inputs=2:duration=first:dropout_transition=3[out]",
                 "-map", "[out]",
