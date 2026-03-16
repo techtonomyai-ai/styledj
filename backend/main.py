@@ -516,6 +516,17 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
             with open(output_path, "rb") as src_f, open(dest, "wb") as dst_f:
                 dst_f.write(src_f.read())
 
+            # Save stems for fast remix — lead vocal + music file kept for 24h
+            stems_lead = f"/tmp/vocals/{track_id}_lead.mp3"
+            stems_h1   = f"/tmp/vocals/{track_id}_h1.mp3"
+            stems_h2   = f"/tmp/vocals/{track_id}_h2.mp3"
+            stems_h3   = f"/tmp/vocals/{track_id}_h3.mp3"
+            stems_music = f"/tmp/vocals/{track_id}_music.mp3"
+            for src, dst in [(lead, stems_lead),(h1, stems_h1),(h2, stems_h2),(h3, stems_h3),(music_path, stems_music)]:
+                try:
+                    import shutil; shutil.copy2(src, dst)
+                except Exception: pass
+
         try:
             conn = get_db()
             conn.execute(
@@ -534,6 +545,7 @@ async def _run_vocals_job(job_id: str, req, user_id: str):
             "style": req.style,
             "voice": req.voice,
             "duration": req.duration,
+            "can_remix": True,
         }
     except Exception as e:
         _vocals_jobs[job_id] = {"status": "failed", "error": str(e)[:200]}
@@ -553,11 +565,67 @@ async def generate_with_vocals(req: VocalsRequest, user_id: str = Depends(verify
 
 @app.get("/vocals/status/{job_id}")
 async def vocals_job_status(job_id: str, user_id: str = Depends(verify_token)):
-    """Poll vocals generation status. Returns {status, step} or {status:done, stream_url} or {status:failed, error}."""
+    """Poll vocals generation status."""
     job = _vocals_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+class RemixRequest(BaseModel):
+    track_id: str
+    music_volume: float = 0.35
+    voice_volume: float = 1.0
+    duration: int = 60
+
+@app.post("/remix")
+async def remix_track(req: RemixRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
+    """Fast remix — re-mix existing stems with new volume settings (~10s, no new vocals/music)."""
+    import subprocess, tempfile
+    if not is_subscribed(user_id, get_token_email(authorization)):
+        raise HTTPException(status_code=402, detail="Subscription required.")
+
+    lead  = f"/tmp/vocals/{req.track_id}_lead.mp3"
+    h1    = f"/tmp/vocals/{req.track_id}_h1.mp3"
+    h2    = f"/tmp/vocals/{req.track_id}_h2.mp3"
+    h3    = f"/tmp/vocals/{req.track_id}_h3.mp3"
+    music = f"/tmp/vocals/{req.track_id}_music.mp3"
+
+    # Fall back to lead for missing harmonies
+    h1 = h1 if os.path.exists(h1) else lead
+    h2 = h2 if os.path.exists(h2) else lead
+    h3 = h3 if os.path.exists(h3) else lead
+
+    if not os.path.exists(lead) or not os.path.exists(music):
+        raise HTTPException(status_code=404, detail="Stems expired — please regenerate the track.")
+
+    new_track_id = str(uuid.uuid4())
+    output_path = f"/tmp/vocals/{new_track_id}.mp3"
+    vv = req.voice_volume
+
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-stream_loop", "-1", "-i", music,
+        "-i", lead,
+        "-i", h1,
+        "-i", h2,
+        "-i", h3,
+        "-filter_complex",
+        f"[0:a]volume={req.music_volume}[bg];"
+        f"[1:a]volume={vv}[lead];"
+        f"[2:a]volume={round(vv*0.45,2)}[h1];"
+        f"[3:a]volume={round(vv*0.35,2)}[h2];"
+        f"[4:a]volume={round(vv*0.20,2)}[h3];"
+        "[lead][h1][h2][h3]amix=inputs=4:duration=longest:dropout_transition=2[vocals];"
+        "[bg][vocals]amix=inputs=2:duration=first:dropout_transition=3[out]",
+        "-map", "[out]", "-codec:a", "libmp3lame", "-b:a", "192k",
+        "-t", str(req.duration), output_path
+    ]
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=60)
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail="Remix failed")
+
+    return {"track_id": new_track_id, "stream_url": f"/stream/{new_track_id}"}
 
 
 @app.get("/stream/{track_id}")

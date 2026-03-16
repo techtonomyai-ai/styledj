@@ -591,6 +591,25 @@
             </div>
           </div>
           <audio id="vocalsAudioPlayer" controls playsinline preload="metadata" style="width:100%;margin-bottom:14px;border-radius:8px;"><source id="vocalsAudioSource" src="" type="audio/mpeg"/></audio>
+
+          <!-- Live remix controls -->
+          <div style="background:rgba(0,0,0,0.3);border-radius:10px;padding:14px;margin-bottom:12px;">
+            <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">🎛️ Adjust Mix & Remix</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span style="font-size:0.8rem;color:var(--muted);">🎚️ Music</span>
+              <span id="remixMusicLabel" style="color:var(--cyan);font-size:0.8rem;font-weight:600;">35%</span>
+            </div>
+            <input type="range" id="remixMusicSlider" min="5" max="80" value="35" step="5" oninput="document.getElementById('remixMusicLabel').textContent=this.value+'%'" style="width:100%;margin-bottom:10px;"/>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span style="font-size:0.8rem;color:var(--muted);">🎤 Vocals</span>
+              <span id="remixVoiceLabel" style="color:var(--cyan);font-size:0.8rem;font-weight:600;">100%</span>
+            </div>
+            <input type="range" id="remixVoiceSlider" min="20" max="200" value="100" step="10" oninput="document.getElementById('remixVoiceLabel').textContent=this.value+'%'" style="width:100%;margin-bottom:12px;"/>
+            <button onclick="remixTrack()" id="remixBtn" style="width:100%;padding:12px;background:rgba(123,47,190,0.3);border:1px solid var(--purple);border-radius:8px;color:#fff;font-weight:700;font-size:0.9rem;cursor:pointer;">
+              🔄 Apply & Remix (~10s)
+            </button>
+          </div>
+
           <button onclick="downloadVocalsTrack()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--purple),var(--cyan));border:none;border-radius:10px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;">
             💾 Save Track with Vocals
           </button>
@@ -809,6 +828,13 @@
           if (p) p.style.width = '100%';
           const streamUrl = `${API}${job.stream_url}`;
           vocalsTrackB64 = job.stream_url;
+          currentVocalsTrackId = job.track_id;
+          currentVocalsDuration = duration;
+          // Sync remix sliders to current generation settings
+          document.getElementById('remixMusicSlider').value = Math.round(musicVol * 100);
+          document.getElementById('remixMusicLabel').textContent = Math.round(musicVol * 100) + '%';
+          document.getElementById('remixVoiceSlider').value = Math.round(voiceVol * 100);
+          document.getElementById('remixVoiceLabel').textContent = Math.round(voiceVol * 100) + '%';
           const vap = document.getElementById('vocalsAudioPlayer');
           document.getElementById('vocalsAudioSource').src = streamUrl;
           vap.load();
@@ -834,10 +860,50 @@
     }
   }
 
+  let currentVocalsTrackId = null;
+  let currentVocalsDuration = 60;
+
   function downloadVocalsTrack() {
     if (!vocalsTrackB64) return;
     const style = document.getElementById('lyricsStyle').value.replace(/ /g,'_');
     showSaveModal(`${API}${vocalsTrackB64}`, `styledj_${style}_vocals.mp3`);
+  }
+
+  async function remixTrack() {
+    if (!currentVocalsTrackId) { showToast('⚠️ Generate a track first'); return; }
+    const btn = document.getElementById('remixBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Remixing...';
+    const musicVol = parseInt(document.getElementById('remixMusicSlider').value) / 100;
+    const voiceVol = parseInt(document.getElementById('remixVoiceSlider').value) / 100;
+    try {
+      const res = await fetch(`${API}/remix`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+        body: JSON.stringify({ track_id: currentVocalsTrackId, music_volume: musicVol, voice_volume: voiceVol, duration: currentVocalsDuration })
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}));
+        throw new Error(e.detail || 'Remix failed');
+      }
+      const data = await res.json();
+      const streamUrl = `${API}${data.stream_url}`;
+      vocalsTrackB64 = data.stream_url;
+      const vap = document.getElementById('vocalsAudioPlayer');
+      document.getElementById('vocalsAudioSource').src = streamUrl;
+      vap.load();
+      vap.play().catch(()=>{});
+      showToast('✅ Remix done! Playing new mix', 2500);
+    } catch(e) {
+      if (e.message.includes('expired')) {
+        showToast('⚠️ Stems expired — regenerate the track first', 4000);
+      } else {
+        showToast('⚠️ ' + (e.message || 'Remix failed'));
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔄 Apply & Remix (~10s)';
+    }
   }
 
   function setLyricsMood(mood) {
