@@ -520,10 +520,9 @@
     <!-- Set Length -->
     <div class="form-group" style="margin-top:16px;">
       <label style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:10px;">⏱️ Set Length</label>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-        <button onclick="setMixDuration(30)" id="mixDur30" style="padding:12px;border-radius:10px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-weight:600;font-size:0.9rem;">30 min<br/><span style="font-size:0.7rem;">8 tracks</span></button>
-        <button onclick="setMixDuration(60)" id="mixDur60" style="padding:12px;border-radius:10px;border:2px solid var(--purple);background:rgba(123,47,190,0.2);color:#fff;cursor:pointer;font-weight:700;font-size:0.9rem;">60 min<br/><span style="font-size:0.7rem;">16 tracks</span></button>
-        <button onclick="setMixDuration(90)" id="mixDur90" style="padding:12px;border-radius:10px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-weight:600;font-size:0.9rem;">90 min<br/><span style="font-size:0.7rem;">24 tracks</span></button>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+        <button onclick="setMixDuration(30)" id="mixDur30" style="padding:14px;border-radius:10px;border:1px solid var(--border);background:#0D0D15;color:var(--muted);cursor:pointer;font-weight:600;font-size:1rem;">30 min<br/><span style="font-size:0.75rem;color:var(--muted);">8 tracks</span></button>
+        <button onclick="setMixDuration(60)" id="mixDur60" style="padding:14px;border-radius:10px;border:2px solid var(--purple);background:rgba(123,47,190,0.2);color:#fff;cursor:pointer;font-weight:700;font-size:1rem;">60 min<br/><span style="font-size:0.75rem;">16 tracks</span></button>
       </div>
     </div>
 
@@ -1165,7 +1164,7 @@
 
   function setMixDuration(mins) {
     selectedMixDuration = mins;
-    [30,60,90].forEach(d => {
+    [30,60].forEach(d => {
       const btn = document.getElementById(`mixDur${d}`);
       if (!btn) return;
       const sel = d === mins;
