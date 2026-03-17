@@ -12,8 +12,64 @@ import stripe
 import jwt as pyjwt
 from dotenv import load_dotenv
 
-# In-memory job store for async vocals generation
+# In-memory job stores
 _vocals_jobs: dict = {}  # job_id -> {status, stream_url, error}
+_mix_jobs: dict = {}     # job_id -> {status, step, stream_url, error}
+
+# Genre → Mubert style mapping for DJ Mix Generator
+GENRE_MIX_MAP = {
+    "Big Room House":      {"style": "Big Room House",       "mood": "energetic",  "bpm": 128},
+    "Progressive House":   {"style": "Progressive House",    "mood": "euphoric",   "bpm": 126},
+    "Tech House":          {"style": "Tech House",           "mood": "energetic",  "bpm": 128},
+    "Deep House":          {"style": "Deep House",           "mood": "chill",      "bpm": 122},
+    "Afro House":          {"style": "Afro House",           "mood": "happy",      "bpm": 122},
+    "Melodic Techno":      {"style": "Melodic Techno",       "mood": "dark",       "bpm": 130},
+    "Afterlife":           {"style": "Melodic Techno",       "mood": "dark",       "bpm": 130},
+    "Techno":              {"style": "Techno",               "mood": "dark",       "bpm": 135},
+    "Trance":              {"style": "Trance",               "mood": "euphoric",   "bpm": 138},
+    "Uplifting Trance":    {"style": "Trance",               "mood": "euphoric",   "bpm": 140},
+    "Psytrance":           {"style": "Psy-Trance",           "mood": "energetic",  "bpm": 145},
+    "Goa":                 {"style": "Psy-Trance",           "mood": "energetic",  "bpm": 145},
+    "Hardstyle":           {"style": "Hardstyle",            "mood": "energetic",  "bpm": 150},
+    "Hardcore":            {"style": "Hardcore",             "mood": "energetic",  "bpm": 160},
+    "Drum and Bass":       {"style": "Drum and Bass",        "mood": "energetic",  "bpm": 174},
+    "DnB":                 {"style": "Drum and Bass",        "mood": "energetic",  "bpm": 174},
+    "Dubstep":             {"style": "Dubstep",              "mood": "dark",       "bpm": 140},
+    "Future Bass":         {"style": "Future Bass",          "mood": "euphoric",   "bpm": 150},
+    "Melodic Dubstep":     {"style": "Future Bass",          "mood": "euphoric",   "bpm": 150},
+    "Trap":                {"style": "Trap",                 "mood": "dark",       "bpm": 140},
+    "Future Trap":         {"style": "Trap",                 "mood": "energetic",  "bpm": 145},
+    "UK Garage":           {"style": "UK Garage",            "mood": "happy",      "bpm": 132},
+    "2-Step":              {"style": "UK Garage",            "mood": "happy",      "bpm": 132},
+    "Bass House":          {"style": "Bass House",           "mood": "energetic",  "bpm": 128},
+    "Breakbeat":           {"style": "Breakbeat",            "mood": "energetic",  "bpm": 130},
+    "Breaks":              {"style": "Breakbeat",            "mood": "energetic",  "bpm": 128},
+    "Acid House":          {"style": "Acid House",           "mood": "energetic",  "bpm": 130},
+    "Acid Techno":         {"style": "Techno",               "mood": "dark",       "bpm": 140},
+    "Electro House":       {"style": "Electro House",        "mood": "energetic",  "bpm": 128},
+    "French House":        {"style": "House",                "mood": "happy",      "bpm": 124},
+    "Nu-Disco":            {"style": "Nu Disco",             "mood": "happy",      "bpm": 120},
+    "Funk":                {"style": "Funk",                 "mood": "happy",      "bpm": 118},
+    "Tropical House":      {"style": "Tropical House",       "mood": "chill",      "bpm": 100},
+    "Chill":               {"style": "Chillout",             "mood": "chill",      "bpm": 95},
+    "Ambient":             {"style": "Ambient",              "mood": "chill",      "bpm": 80},
+    "Downtempo":           {"style": "Downtempo",            "mood": "chill",      "bpm": 90},
+    "Amapiano":            {"style": "Afro House",           "mood": "happy",      "bpm": 112},
+    "Minimal Techno":      {"style": "Minimal Techno",       "mood": "dark",       "bpm": 128},
+    "Balearic Beat":       {"style": "House",                "mood": "chill",      "bpm": 116},
+    "Afrobeat":            {"style": "Afro House",           "mood": "happy",      "bpm": 110},
+    "Grime":               {"style": "Grime",                "mood": "dark",       "bpm": 140},
+    "Baile Funk":          {"style": "House",                "mood": "energetic",  "bpm": 140},
+}
+
+# Energy profile → mood sequence
+ENERGY_PROFILES = {
+    "warmup":      ["chill","chill","happy","happy","energetic","energetic","euphoric","euphoric"],
+    "peak_hours":  ["energetic","euphoric","energetic","euphoric","dark","energetic","euphoric","energetic"],
+    "festival":    ["chill","happy","energetic","euphoric","energetic","euphoric","energetic","energetic"],
+    "chill":       ["chill","chill","chill","happy","chill","chill","happy","chill"],
+    "pure_energy": ["energetic","energetic","euphoric","energetic","dark","energetic","euphoric","energetic"],
+}
 try:
     from backend.mubert_client import generate_track
 except ImportError:
@@ -679,11 +735,161 @@ async def vocals_job_status(job_id: str, user_id: str = Depends(verify_token)):
     return job
 
 
+class MixRequest(BaseModel):
+    genres: list = ["Progressive House"]
+    duration_minutes: int = 60   # 30, 60, or 90
+    energy_profile: str = "peak_hours"  # warmup, peak_hours, festival, chill, pure_energy
+
 class RemixRequest(BaseModel):
     track_id: str
     music_volume: float = 0.35
     voice_volume: float = 1.0
     duration: int = 60
+
+async def _run_mix_job(job_id: str, req, user_id: str):
+    """Background: generate multi-track DJ mix with crossfades."""
+    import tempfile, subprocess, httpx as _httpx, shutil
+    try:
+        _mix_jobs[job_id] = {"status": "processing", "step": "Starting mix..."}
+        try:
+            from backend.mubert_client import generate_track as gen
+        except ImportError:
+            from mubert_client import generate_track as gen
+
+        # Number of tracks based on duration
+        track_counts = {30: 8, 60: 16, 90: 24}
+        n_tracks = track_counts.get(req.duration_minutes, 16)
+        track_dur = 190  # ~3 min 10s each with overlap
+
+        # Get mood sequence for energy profile
+        profile_key = req.energy_profile.replace("-", "_")
+        mood_seq = ENERGY_PROFILES.get(profile_key, ENERGY_PROFILES["peak_hours"])
+
+        # Build track plan: cycle genres + moods
+        genres = [g for g in req.genres if g in GENRE_MIX_MAP] or ["Progressive House"]
+        track_plan = []
+        for i in range(n_tracks):
+            genre = genres[i % len(genres)]
+            mood_idx = int(i / n_tracks * len(mood_seq))
+            mood = mood_seq[min(mood_idx, len(mood_seq)-1)]
+            info = GENRE_MIX_MAP[genre]
+            track_plan.append({"style": info["style"], "mood": mood, "genre": genre})
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            track_paths = []
+
+            # Generate + download all tracks
+            for i, tp in enumerate(track_plan):
+                _mix_jobs[job_id]["step"] = f"Generating track {i+1} of {n_tracks} ({tp['genre']})..."
+                try:
+                    result = await gen(tp["style"], track_dur, tp["mood"])
+                    url = result.get("url", "")
+                    if not url:
+                        continue
+                    path = os.path.join(tmpdir, f"track_{i:02d}.mp3")
+                    async with _httpx.AsyncClient(timeout=60) as client:
+                        r = await client.get(url)
+                        with open(path, "wb") as f:
+                            f.write(r.content)
+                    track_paths.append(path)
+                except Exception as e:
+                    continue  # skip failed tracks, keep going
+
+            if len(track_paths) < 2:
+                _mix_jobs[job_id] = {"status": "failed", "error": "Not enough tracks generated"}
+                return
+
+            _mix_jobs[job_id]["step"] = f"Mixing {len(track_paths)} tracks with crossfades..."
+            os.makedirs("/tmp/mixes", exist_ok=True)
+            mix_id = str(uuid.uuid4())
+            output_path = f"/tmp/mixes/{mix_id}.mp3"
+
+            # Build ffmpeg crossfade chain
+            # Each track overlaps by 8s with crossfade
+            inputs = []
+            for p in track_paths:
+                inputs += ["-i", p]
+
+            # Build filter_complex for chained acrossfades
+            fc = ""
+            prev = "0:a"
+            for i in range(1, len(track_paths)):
+                out_label = f"a{i:02d}"
+                fc += f"[{prev}][{i}:a]acrossfade=d=8:c1=tri:c2=tri[{out_label}];"
+                prev = out_label
+            fc = fc.rstrip(";")
+
+            ffmpeg_cmd = ["ffmpeg", "-y"] + inputs + [
+                "-filter_complex", fc,
+                "-map", f"[{prev}]",
+                "-codec:a", "libmp3lame", "-b:a", "192k",
+                output_path
+            ]
+            mix_result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=300)
+            if mix_result.returncode != 0:
+                _mix_jobs[job_id] = {"status": "failed", "error": f"Mix failed: {mix_result.stderr.decode()[:200]}"}
+                return
+
+        _mix_jobs[job_id] = {
+            "status": "done",
+            "mix_id": mix_id,
+            "stream_url": f"/stream/mix/{mix_id}",
+            "genres": req.genres,
+            "duration_minutes": req.duration_minutes,
+            "energy_profile": req.energy_profile,
+            "track_count": len(track_paths),
+        }
+    except Exception as e:
+        _mix_jobs[job_id] = {"status": "failed", "error": str(e)[:200]}
+
+
+@app.post("/mix")
+async def generate_mix(req: MixRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
+    """Start async DJ mix generation — returns job_id immediately."""
+    if not is_subscribed(user_id, get_token_email(authorization)):
+        raise HTTPException(status_code=402, detail="Subscription required.")
+    job_id = str(uuid.uuid4())
+    _mix_jobs[job_id] = {"status": "processing", "step": "Starting..."}
+    asyncio.ensure_future(_run_mix_job(job_id, req, user_id))
+    return {"job_id": job_id, "status": "processing"}
+
+
+@app.get("/mix/status/{job_id}")
+async def mix_job_status(job_id: str, user_id: str = Depends(verify_token)):
+    job = _mix_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Mix job not found")
+    return job
+
+
+@app.get("/stream/mix/{mix_id}")
+async def stream_mix(mix_id: str, request: Request):
+    """Stream a DJ mix file with Range request support."""
+    from fastapi.responses import Response, StreamingResponse
+    import re as _re
+    path = f"/tmp/mixes/{mix_id}.mp3"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Mix not found or expired")
+    file_size = os.path.getsize(path)
+    range_header = request.headers.get("range")
+    if range_header:
+        match = _re.search(r"bytes=(\d+)-(\d*)", range_header)
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else file_size - 1
+            end = min(end, file_size - 1)
+            chunk_size = end - start + 1
+            with open(path, "rb") as f:
+                f.seek(start)
+                data = f.read(chunk_size)
+            return Response(content=data, status_code=206, media_type="audio/mpeg",
+                headers={"Content-Range": f"bytes {start}-{end}/{file_size}",
+                         "Accept-Ranges": "bytes", "Content-Length": str(chunk_size)})
+    with open(path, "rb") as f:
+        data = f.read()
+    return Response(content=data, media_type="audio/mpeg",
+        headers={"Content-Length": str(file_size), "Accept-Ranges": "bytes"})
+
 
 @app.post("/remix")
 async def remix_track(req: RemixRequest, user_id: str = Depends(verify_token), authorization: Optional[str] = Header(None)):
