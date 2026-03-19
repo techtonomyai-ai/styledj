@@ -1,4 +1,6 @@
-import os, uuid, hashlib, sqlite3, asyncio, threading
+import os, uuid, hashlib, asyncio, threading
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -94,14 +96,38 @@ STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000")
 
 # --- DB Setup ---
-_data_dir = os.getenv("DATA_DIR", "/data")
-os.makedirs(_data_dir, exist_ok=True)
-DB_PATH = os.path.join(_data_dir, "styleDJ.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+class _PGConn:
+    """Thin SQLite-compatible wrapper around a psycopg2 connection.
+    Translates ? placeholders to %s and exposes execute/commit/close/rollback."""
+    def __init__(self, raw):
+        self._raw = raw
+        self._cur = raw.cursor()
+
+    def execute(self, sql, params=()):
+        self._cur.execute(sql.replace('?', '%s'), params or ())
+        return self._cur
+
+    def commit(self):
+        self._raw.commit()
+
+    def rollback(self):
+        self._raw.rollback()
+
+    def close(self):
+        try:
+            self._cur.close()
+        except Exception:
+            pass
+        try:
+            self._raw.close()
+        except Exception:
+            pass
+
+def get_db() -> _PGConn:
+    raw = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return _PGConn(raw)
 
 ADMIN_EMAILS = ["techtonomyllc@gmail.com", "techtonomy.ai@gmail.com"]
 
@@ -262,7 +288,8 @@ async def register(req: RegisterRequest):
              1 if req.email.lower() in [e.lower() for e in ADMIN_EMAILS] else 0)
         )
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
+        conn.rollback()
         raise HTTPException(status_code=400, detail="Email already registered")
     finally:
         conn.close()
