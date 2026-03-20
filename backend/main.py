@@ -1,6 +1,7 @@
 import os, uuid, hashlib, asyncio, threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
@@ -97,10 +98,12 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000")
 
 # --- DB Setup ---
 DATABASE_URL = os.getenv("DATABASE_URL")
+DATA_DIR = os.getenv("DATA_DIR", "/tmp")
+SQLITE_PATH = os.path.join(DATA_DIR, "styleDJ.db")
+USE_POSTGRES = bool(DATABASE_URL)
 
 class _PGConn:
-    """Thin SQLite-compatible wrapper around a psycopg2 connection.
-    Translates ? placeholders to %s and exposes execute/commit/close/rollback."""
+    """Thin SQLite-compatible wrapper around a psycopg2 connection."""
     def __init__(self, raw):
         self._raw = raw
         self._cur = raw.cursor()
@@ -125,9 +128,38 @@ class _PGConn:
         except Exception:
             pass
 
-def get_db() -> _PGConn:
-    raw = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    return _PGConn(raw)
+class _SQLiteConn:
+    """SQLite fallback wrapper with same interface as _PGConn."""
+    def __init__(self, raw):
+        self._raw = raw
+        self._raw.row_factory = sqlite3.Row
+        self._cur = raw.cursor()
+
+    def execute(self, sql, params=()):
+        self._cur.execute(sql, params or ())
+        return self._cur
+
+    def commit(self):
+        self._raw.commit()
+
+    def rollback(self):
+        self._raw.rollback()
+
+    def close(self):
+        try:
+            self._raw.close()
+        except Exception:
+            pass
+
+def get_db():
+    if USE_POSTGRES:
+        try:
+            raw = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+            return _PGConn(raw)
+        except Exception as e:
+            print(f"[DB] PostgreSQL failed ({e}), falling back to SQLite")
+    raw = sqlite3.connect(SQLITE_PATH, check_same_thread=False)
+    return _SQLiteConn(raw)
 
 ADMIN_EMAILS = ["techtonomyllc@gmail.com", "techtonomy.ai@gmail.com"]
 
