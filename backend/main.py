@@ -286,8 +286,15 @@ class LoginRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     style: str = "Martin Garrix"
+    dj_name: Optional[str] = None  # alias for style
     duration: int = 60
     mood: str = "energetic"
+
+    def __init__(self, **data):
+        # Accept dj_name as alias for style
+        if 'dj_name' in data and 'style' not in data:
+            data['style'] = data['dj_name']
+        super().__init__(**data)
 
 class CheckoutRequest(BaseModel):
     success_url: Optional[str] = None
