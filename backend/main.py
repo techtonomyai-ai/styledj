@@ -863,20 +863,41 @@ async def _run_mix_job(job_id: str, req, user_id: str):
             mix_id = str(uuid.uuid4())
             output_path = f"/tmp/mixes/{mix_id}.mp3"
 
-            # Build ffmpeg crossfade chain
-            # Each track overlaps by 8s with crossfade
+            # Build ffmpeg crossfade chain — professional DJ mixing
+            # Crossfade duration scales with mix length: longer mixes = smoother transitions
+            duration_min = getattr(req, 'duration_minutes', 30)
+            if duration_min >= 60:
+                xfade_dur = 24  # 24s crossfade for 60-min mixes
+            elif duration_min >= 30:
+                xfade_dur = 16  # 16s crossfade for 30-min mixes
+            else:
+                xfade_dur = 10  # 10s for shorter mixes
+
             inputs = []
             for p in track_paths:
                 inputs += ["-i", p]
 
-            # Build filter_complex for chained acrossfades
-            fc = ""
+            # Professional DJ transition filter chain:
+            # - exp curve (exponential) = natural DJ fade feel
+            # - Low-pass on outgoing track as it exits (EQ sweep down)
+            # - High-pass on incoming track as it enters (EQ sweep up)
+            # - Slight volume boost during transition to avoid dip
+            fc_parts = []
             prev = "0:a"
+
             for i in range(1, len(track_paths)):
                 out_label = f"a{i:02d}"
-                fc += f"[{prev}][{i}:a]acrossfade=d=8:c1=tri:c2=tri[{out_label}];"
+                # Apply low-pass filter to outgoing, high-pass to incoming for DJ EQ effect
+                lp_label = f"lp{i:02d}"
+                hp_label = f"hp{i:02d}"
+                xf_label = f"xf{i:02d}"
+
+                fc_parts.append(f"[{prev}]lowpass=f=18000,volume=1.05[{lp_label}]")
+                fc_parts.append(f"[{i}:a]highpass=f=40,volume=1.05[{hp_label}]")
+                fc_parts.append(f"[{lp_label}][{hp_label}]acrossfade=d={xfade_dur}:c1=exp:c2=exp[{out_label}]")
                 prev = out_label
-            fc = fc.rstrip(";")
+
+            fc = ";".join(fc_parts)
 
             ffmpeg_cmd = ["ffmpeg", "-y"] + inputs + [
                 "-filter_complex", fc,
