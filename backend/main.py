@@ -1286,10 +1286,6 @@ async def stripe_webhook(request: Request):
 async def health():
     return {"status": "ok", "service": "StyleDJ API"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
 @app.get("/djapollo/terms")
 async def djapollo_terms():
     html = """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Terms of Service — DJ Apollo</title>
@@ -1314,3 +1310,7 @@ async def djapollo_privacy():
 <h2>4. Contact</h2><p><a href="mailto:techtonomyllc@gmail.com">techtonomyllc@gmail.com</a></p>
 <p style="margin-top:40px;color:#555;">© 2026 Techtonomy, LLC — DJ Apollo.</p></body></html>"""
     return Response(content=html, media_type="text/html")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
