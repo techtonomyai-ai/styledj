@@ -1289,3 +1289,28 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.get("/djapollo/terms")
+async def djapollo_terms():
+    html = """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Terms of Service — DJ Apollo</title>
+<style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;background:#0a0a0a;color:#ddd;line-height:1.7}h1{color:#00E5FF}h2{color:#fff;margin-top:30px}a{color:#00E5FF}p{color:#bbb}</style></head>
+<body><h1>DJ Apollo — Terms of Service</h1><p><strong>Last updated:</strong> March 22, 2026</p>
+<h2>1. Acceptance</h2><p>By accessing DJ Apollo content you agree to these terms.</p>
+<h2>2. Service</h2><p>DJ Apollo provides AI-generated EDM mixes on YouTube, TikTok, Instagram, SoundCloud, Mixcloud, and Audiomack.</p>
+<h2>3. Intellectual Property</h2><p>All DJ Apollo content is owned by Techtonomy, LLC. No reproduction without permission.</p>
+<h2>4. Disclaimer</h2><p>Content provided as-is. Techtonomy LLC not liable for any damages.</p>
+<h2>5. Contact</h2><p><a href="mailto:techtonomyllc@gmail.com">techtonomyllc@gmail.com</a></p>
+<p style="margin-top:40px;color:#555;">© 2026 Techtonomy, LLC — DJ Apollo.</p></body></html>"""
+    return Response(content=html, media_type="text/html")
+
+@app.get("/djapollo/privacy")
+async def djapollo_privacy():
+    html = """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Privacy Policy — DJ Apollo</title>
+<style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;background:#0a0a0a;color:#ddd;line-height:1.7}h1{color:#00E5FF}h2{color:#fff;margin-top:30px}a{color:#00E5FF}p{color:#bbb}</style></head>
+<body><h1>DJ Apollo — Privacy Policy</h1><p><strong>Last updated:</strong> March 22, 2026</p>
+<h2>1. Introduction</h2><p>Techtonomy, LLC operates DJ Apollo and is committed to protecting your privacy.</p>
+<h2>2. Data Collection</h2><p>We do not directly collect personal data. Third-party platforms (YouTube, TikTok, Instagram, SoundCloud) collect data per their own policies.</p>
+<h2>3. Children</h2><p>Content intended for users 13+. We do not knowingly collect data from children under 13.</p>
+<h2>4. Contact</h2><p><a href="mailto:techtonomyllc@gmail.com">techtonomyllc@gmail.com</a></p>
+<p style="margin-top:40px;color:#555;">© 2026 Techtonomy, LLC — DJ Apollo.</p></body></html>"""
+    return Response(content=html, media_type="text/html")
