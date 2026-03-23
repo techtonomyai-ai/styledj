@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, UploadFile, File, Form
+from fastapi.responses import Response as FastAPIResponse
 import json
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -1300,7 +1301,7 @@ async def djapollo_terms():
         "<h2>5. Contact</h2><p><a href='mailto:techtonomyllc@gmail.com'>techtonomyllc@gmail.com</a></p>"
         "<p style='margin-top:40px;color:#555;'>2026 Techtonomy, LLC - DJ Apollo.</p></body></html>"
     )
-    return Response(content=html, media_type="text/html")
+    return FastAPIResponse(content=html, media_type="text/html")
 
 @app.get("/djapollo/privacy")
 async def djapollo_privacy():
@@ -1315,7 +1316,7 @@ async def djapollo_privacy():
         "<h2>4. Contact</h2><p><a href='mailto:techtonomyllc@gmail.com'>techtonomyllc@gmail.com</a></p>"
         "<p style='margin-top:40px;color:#555;'>2026 Techtonomy, LLC - DJ Apollo.</p></body></html>"
     )
-    return Response(content=html, media_type="text/html")
+    return FastAPIResponse(content=html, media_type="text/html")
 
 if __name__ == "__main__":
     import uvicorn
